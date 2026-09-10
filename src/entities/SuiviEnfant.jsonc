@@ -1,0 +1,39 @@
+{
+  "name": "SuiviEnfant",
+  "type": "object",
+  "properties": {
+    "enfant_nom": {
+      "type": "string"
+    },
+    "code_appairage": {
+      "type": "string"
+    },
+    "delai_action_min": {
+      "type": "number",
+      "default": 15,
+      "description": "Minutes avant qu'une t\u00e2che non commenc\u00e9e passe en retard"
+    },
+    "actif": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "enfant_nom",
+    "code_appairage"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

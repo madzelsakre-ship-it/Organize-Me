@@ -1,0 +1,64 @@
+{
+  "name": "Habitude",
+  "type": "object",
+  "properties": {
+    "nom": {
+      "type": "string"
+    },
+    "emoji": {
+      "type": "string",
+      "default": "⭐"
+    },
+    "categorie": {
+      "type": "string",
+      "enum": ["sport", "sante", "etude", "spiritual", "social", "autre"],
+      "default": "autre"
+    },
+    "frequence": {
+      "type": "string",
+      "enum": ["quotidien", "semaine"],
+      "default": "quotidien"
+    },
+    "jours_cibles": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "Indices des jours cibles (0=Lun ... 6=Dim)"
+    },
+    "objectif_minutes": {
+      "type": "number",
+      "default": 0
+    },
+    "couleur": {
+      "type": "string",
+      "default": "#F97316"
+    },
+    "completions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Liste de dates ISO (YYYY-MM-DD) ou la tache a ete accomplie"
+    },
+    "archivee": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": ["nom"],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Organize_Me",
+  "short_name": "Organize_Me",
+  "description": "Ton coach de discipline personnel. Tâches, habitudes, programmes et focus.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#6366F1",
+  "background_color": "#000000",
+  "icons": [
+    {
+      "src": "https://media.base44.com/images/public/69da6d19e07a13ada0c59433/ddef82897_generated_image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

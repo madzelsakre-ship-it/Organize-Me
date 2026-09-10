@@ -1,0 +1,52 @@
+{
+  "name": "StatJour",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string"
+    },
+    "total": {
+      "type": "number",
+      "default": 0
+    },
+    "faites": {
+      "type": "number",
+      "default": 0
+    },
+    "streak": {
+      "type": "number",
+      "default": 0
+    },
+    "energie": {
+      "type": "number",
+      "default": 3
+    },
+    "focus": {
+      "type": "number",
+      "default": 3
+    },
+    "humeur": {
+      "type": "number",
+      "default": 3
+    }
+  },
+  "required": [
+    "date",
+    "total",
+    "faites"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

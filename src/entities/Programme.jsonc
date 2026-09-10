@@ -1,0 +1,49 @@
+{
+  "name": "Programme",
+  "type": "object",
+  "properties": {
+    "nom": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "couleur_theme": {
+      "type": "string",
+      "default": "#D4AF37"
+    },
+    "est_favori": {
+      "type": "boolean",
+      "default": false
+    },
+    "jours": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "creneaux": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "required": [
+    "nom"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

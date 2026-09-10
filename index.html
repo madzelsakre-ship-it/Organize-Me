@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#6366F1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Coach Elite" />
+    <link rel="apple-touch-icon" href="https://media.base44.com/images/public/69da6d19e07a13ada0c59433/ddef82897_generated_image.png" />
+
+    <!-- SEO / Meta -->
+    <title>Coach Elite — Discipline & Objectifs</title>
+    <meta name="description" content="Ton coach de discipline personnel. Tâches, habitudes, programmes et focus." />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Icône -->
+    <link rel="icon" type="image/svg+xml" href="https://base44.com/logo_v2.svg" />
+
+    <!-- Preconnect fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Enregistrement du Service Worker (PWA)
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(reg => reg.update())
+            .catch(() => {});
+          // Recharge la page quand un nouveau SW prend le relais
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

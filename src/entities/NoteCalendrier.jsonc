@@ -1,0 +1,39 @@
+{
+  "name": "NoteCalendrier",
+  "type": "object",
+  "properties": {
+    "titre": {
+      "type": "string"
+    },
+    "contenu": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "description": "Date ISO YYYY-MM-DD"
+    },
+    "heure_rappel": {
+      "type": "string",
+      "description": "Heure de rappel ex: 09h00"
+    },
+    "notifie": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": ["titre", "date"],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}
