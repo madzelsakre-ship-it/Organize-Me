@@ -1,0 +1,72 @@
+{
+  "name": "TacheEnfant",
+  "type": "object",
+  "properties": {
+    "suivi_id": {
+      "type": "string",
+      "description": "R\u00e9f\u00e9rence vers SuiviEnfant"
+    },
+    "titre": {
+      "type": "string"
+    },
+    "jour": {
+      "type": "string",
+      "description": "Date ISO YYYY-MM-DD"
+    },
+    "heure": {
+      "type": "string",
+      "description": "Heure limite ex: 08h00"
+    },
+    "statut": {
+      "type": "string",
+      "enum": [
+        "a_faire",
+        "en_cours",
+        "validee",
+        "manquee",
+        "en_retard"
+      ],
+      "default": "a_faire"
+    },
+    "commencee_a": {
+      "type": "string",
+      "description": "ISO timestamp du d\u00e9but"
+    },
+    "finie_a": {
+      "type": "string",
+      "description": "ISO timestamp de fin"
+    },
+    "important": {
+      "type": "boolean",
+      "default": false
+    },
+    "note_parent": {
+      "type": "string"
+    },
+    "notifie_parent": {
+      "type": "boolean",
+      "default": false,
+      "description": "Indique que le parent a d\u00e9j\u00e0 \u00e9t\u00e9 notifi\u00e9 du retard"
+    }
+  },
+  "required": [
+    "suivi_id",
+    "titre",
+    "jour",
+    "heure"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

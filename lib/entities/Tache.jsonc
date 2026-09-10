@@ -1,0 +1,67 @@
+{
+  "name": "Tache",
+  "type": "object",
+  "properties": {
+    "titre": {
+      "type": "string"
+    },
+    "jour": {
+      "type": "string"
+    },
+    "heure": {
+      "type": "string"
+    },
+    "faite": {
+      "type": "boolean",
+      "default": false
+    },
+    "priorite": {
+      "type": "string",
+      "enum": [
+        "haute",
+        "normale",
+        "basse"
+      ],
+      "default": "normale"
+    },
+    "categorie": {
+      "type": "string",
+      "enum": [
+        "priere",
+        "sport",
+        "etude",
+        "repas",
+        "sommeil",
+        "loisir",
+        "travail",
+        "autre"
+      ],
+      "default": "autre"
+    },
+    "note": {
+      "type": "string"
+    },
+    "date_faite": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "titre",
+    "jour",
+    "heure"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

@@ -1,5 +1,5 @@
-export function AspectRatio({ children }) {
-  return <div>{children}</div>;
-}
+import * as AspectRatioPrimitive from "@radix-ui/react-aspect-ratio"
 
-export default AspectRatio;
+const AspectRatio = AspectRatioPrimitive.Root
+
+export { AspectRatio }

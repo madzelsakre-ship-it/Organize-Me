@@ -1,0 +1,52 @@
+{
+  "name": "Objectif",
+  "type": "object",
+  "properties": {
+    "titre": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "jour",
+        "semaine",
+        "matinee",
+        "mois",
+        "annee",
+        "vie"
+      ],
+      "default": "jour",
+      "description": "Horizon de l'objectif"
+    },
+    "emoji": {
+      "type": "string",
+      "default": "\ud83c\udfaf"
+    },
+    "atteint": {
+      "type": "boolean",
+      "default": false
+    },
+    "date_cible": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "titre",
+    "type"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "update": {
+      "created_by": "{{user.email}}"
+    },
+    "delete": {
+      "created_by": "{{user.email}}"
+    }
+  }
+}

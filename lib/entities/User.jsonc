@@ -1,0 +1,38 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "description": "The role of the user in the app",
+      "enum": [
+        "admin",
+        "user"
+      ]
+    },
+    "objectif_principal": {
+      "type": "string",
+      "description": "Objectif de vie principal de l'utilisateur"
+    },
+    "objectif_emoji": {
+      "type": "string",
+      "description": "Emoji associ\u00e9 \u00e0 l'objectif"
+    },
+    "mantra": {
+      "type": "string",
+      "description": "Mantra personnelle affich\u00e9e quotidiennement"
+    },
+    "heure_reveil": {
+      "type": "string",
+      "description": "Heure de r\u00e9veil habituelle ex: 6h30"
+    },
+    "premiere_connexion": {
+      "type": "boolean",
+      "default": true,
+      "description": "True si l'utilisateur n'a pas encore compl\u00e9t\u00e9 l'onboarding"
+    }
+  },
+  "required": [
+    "role"
+  ]
+}
