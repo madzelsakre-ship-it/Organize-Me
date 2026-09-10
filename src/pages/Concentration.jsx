@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { Play, Pause, Square, Shield, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 const APPS_DISTRACTION = [

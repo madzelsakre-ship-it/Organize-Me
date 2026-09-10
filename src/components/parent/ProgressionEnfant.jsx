@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { TrendingUp, AlertTriangle, CheckCircle2, XCircle, Activity } from 'lucide-react';
 import { aujourdISO, parseHeureMin, STATUTS } from '@/lib/surveillance';
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Target, Flame, CheckCircle2, LogOut, Pencil, Shield, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Sparkles, Pencil, X, Check } from 'lucide-react';
 import { MANTRAS_SUGGESTIONS } from '@/lib/objectifs';

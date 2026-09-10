@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { Bell, BellOff, Plus, Trash2, X, Clock, Star, Settings, Check } from 'lucide-react';
 import { DEFAULT_PREFS, saveNotifPrefs } from '@/hooks/useTaskNotifications';
 

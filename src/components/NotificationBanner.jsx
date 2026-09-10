@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, X, Clock, CheckCircle2, SkipForward } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 
 function parseMin(heure) {
   if (!heure) return null;

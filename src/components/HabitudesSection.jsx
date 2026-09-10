@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { Plus, CheckCircle2, Circle, X } from 'lucide-react';
 
 const CATEGORIES_HAB = {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { JOURS } from '@/lib/coachData';
 import { Sparkles, X, Loader2, ChevronRight, CheckCircle2 } from 'lucide-react';
 

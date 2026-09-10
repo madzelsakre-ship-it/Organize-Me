@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { Plus, KeyRound, X, Baby, ChevronRight, Bell } from 'lucide-react';
 import { genererCode, aujourdISO, parseHeureMin, nowMin } from '@/lib/surveillance';
 import CodeAppairage from '@/components/parent/CodeAppairage';

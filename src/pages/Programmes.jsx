@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { CATEGORIES, JOURS, TEMPLATES, genererProgramme } from '@/lib/coachData';
 import { Plus, Star, Trash2, X, ChevronRight, Clock, Sparkles, Pencil } from 'lucide-react';
 import ScannerOCR from '@/components/ScannerOCR';

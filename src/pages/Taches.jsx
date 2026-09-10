@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { CATEGORIES, PRIORITES, JOURS } from '@/lib/coachData';
 import { Plus, CheckCircle2, Circle, Trash2, X, Zap, Sparkles, Loader2 } from 'lucide-react';
 import HabitudesSection from '@/components/HabitudesSection';

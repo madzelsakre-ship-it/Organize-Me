@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { KeyRound, LogOut, Bell } from 'lucide-react';
 import { aujourdISO, parseHeureMin, nowMin } from '@/lib/surveillance';
 import TacheEnfantCarte from '@/components/enfant/TacheEnfantCarte';

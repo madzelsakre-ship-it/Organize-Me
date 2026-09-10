@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { Sparkles, ChevronDown } from 'lucide-react';
 import { TYPES_ORDRE, TYPES_OBJECTIF } from '@/lib/objectifs';
 import MantraBanner from '@/components/objectifs/MantraBanner';

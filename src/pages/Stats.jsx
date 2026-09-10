@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { CATEGORIES, JOURS } from '@/lib/coachData';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Flame, Target, TrendingUp, CheckCircle2, X, Moon } from 'lucide-react';

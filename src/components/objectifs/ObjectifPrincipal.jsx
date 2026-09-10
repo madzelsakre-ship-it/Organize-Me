@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Pencil, Check, X, Lightbulb, Target } from 'lucide-react';
 import { OBJECTIFS_PRINCIPAUX } from '@/lib/objectifs';
