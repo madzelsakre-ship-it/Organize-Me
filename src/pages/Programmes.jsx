@@ -229,7 +229,6 @@ export default function Programmes() {
                       <tr key={cr.id} className={i % 2 === 0 ? '' : 'bg-accent/30'}>
                         <td className="p-3 text-muted-foreground font-mono whitespace-nowrap">{cr.libelle}</td>
                         {joursActifs.map(j => {
-                          // Priorité aux cellules par jour, sinon contenu global
                           const cellule = cr.cellules?.[j.id];
                           const contenu = cellule?.contenu || cr.contenu || '';
                           const cat = CATEGORIES[cellule?.categorie || cr.categorie] || CATEGORIES.autre;
@@ -515,29 +514,29 @@ export default function Programmes() {
     );
   }
 
-  // Vue liste
+  // Vue liste corrigée pour mobile
   return (
     <div className="p-4 lg:p-8 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-xl font-black text-foreground">Mes Programmes</h1>
           <p className="text-sm text-muted-foreground">{programmes.length} programme{programmes.length !== 1 ? 's' : ''}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setShowGenerateurIA(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl font-bold text-sm border border-border hover:border-gold transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm border border-border hover:border-gold transition-colors"
             style={{ background: 'var(--surface)', color: 'var(--gold)' }}
           >
             <Sparkles size={14} /> IA
           </button>
           <button onClick={() => setShowScanner(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl font-bold text-sm border border-border hover:border-gold transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm border border-border hover:border-gold transition-colors"
             style={{ background: 'var(--surface)', color: 'var(--gold)' }}
           >
             📷 Scanner
           </button>
           <button onClick={() => { setVue('nouveau'); setEtape(0); setVoie(null); }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm"
             style={{ background: 'var(--gold)', color: '#080810' }}
           >
             <Plus size={16} /> Nouveau
