@@ -1,9 +1,9 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import useTaskNotifications from '@/hooks/useTaskNotifications';
 import useDynamicAccent from '@/hooks/useDynamicAccent';
-import { Home, CheckSquare, Calendar, CalendarDays, BarChart2, User, Shield, Users, Target } from 'lucide-react';
+import { Home, CheckSquare, Calendar, CalendarDays, BarChart2, User, Shield, Users, Target, Settings } from 'lucide-react';
 
-// 1. Navigation complète pour la Sidebar Desktop
+// 1. Navigation complète pour la Sidebar Desktop (avec Paramètres ajouté)
 const DESKTOP_NAV = [
   { path: '/', icon: Home, label: 'Accueil' },
   { path: '/taches', icon: CheckSquare, label: 'Tâches' },
@@ -14,14 +14,16 @@ const DESKTOP_NAV = [
   { path: '/parent', icon: Users, label: 'Famille' },
   { path: '/objectifs', icon: Target, label: 'Objectifs' },
   { path: '/profil', icon: User, label: 'Profil' },
+  { path: '/parametres', icon: Settings, label: 'Réglages' },
 ];
 
-// 2. Navigation épurée pour le Bottom Nav Mobile (4 onglets sans scroll)
+// 2. Navigation optimisée à 5 onglets pour le Bottom Nav Mobile
 const MOBILE_NAV = [
   { path: '/', icon: Home, label: 'Accueil' },
   { path: '/taches', icon: CheckSquare, label: 'Tâches' },
   { path: '/concentration', icon: Shield, label: 'Focus' },
   { path: '/programmes', icon: Calendar, label: 'Programmes' },
+  { path: '/parametres', icon: Settings, label: 'Réglages' },
 ];
 
 export default function Layout() {
@@ -31,7 +33,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ background: 'var(--noir)' }}>
-      
+
       {/* Sidebar desktop */}
       <aside className="hidden md:flex flex-col w-20 lg:w-56 border-r border-border shrink-0 sticky top-0 h-screen" style={{ background: '#0D0D18' }}>
         <div className="p-4 lg:p-6 border-b border-border">
@@ -40,7 +42,7 @@ export default function Layout() {
             <span className="hidden lg:block text-sm font-black tracking-widest gold-text">COACH ELITE</span>
           </div>
         </div>
-        <nav className="flex-1 p-3 lg:p-4 space-y-1">
+        <nav className="flex-1 p-3 lg:p-4 space-y-1 overflow-y-auto">
           {DESKTOP_NAV.map(({ path, icon: Icon, label }) => {
             const active = location.pathname === path;
             return (
@@ -65,7 +67,7 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {/* Bottom nav mobile (Épuré à 4 onglets fixes sans défilement) */}
+      {/* Bottom nav mobile (Fixé à 5 onglets) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border z-50 px-2 py-1" style={{ background: '#0D0D18' }}>
         <div className="flex w-full justify-around items-center">
           {MOBILE_NAV.map(({ path, icon: Icon, label }) => {
