@@ -20,21 +20,18 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setErrorMsg('');
 
     try {
-      // Téléversement optionnel pour garder la trace du fichier
       let file_url = null;
       try {
         const uploadRes = await base44.integrations.Core.UploadFile({ file });
         file_url = uploadRes?.file_url;
         setImageUrl(file_url);
       } catch (uploadErr) {
-        console.warn("Upload ignoré ou non critique:", uploadErr);
+        console.warn("Upload ignoré:", uploadErr);
       }
 
-      // Nettoyage du nom du fichier pour le titre du programme
       const fileNameClean = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
       const formattedName = fileNameClean.charAt(0).toUpperCase() + fileNameClean.slice(1);
 
-      // Créneaux par défaut prêts à l'emploi
       const mockCreneaux = [
         { libelle: "08h00-10h00", contenu: "Session principale", categorie: "etude" },
         { libelle: "10h30-12h30", contenu: "Travaux dirigés / Pratique", categorie: "etude" },
@@ -47,8 +44,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
       });
       setEtape('resultat');
     } catch (err) {
-      const detail = err?.message || String(err);
-      setErrorMsg(`Échec de l'import : ${detail}.`);
+      setErrorMsg(`Échec de l'import : ${err?.message || err}.`);
       setEtape('erreur');
     } finally {
       setLoading(false);
@@ -62,7 +58,27 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setErrorMsg('');
 
     try {
-      // Construction simplifiée et robuste de l'objet pour la base de données
+      // 1. S'assurer qu'une session/utilisateur est actif (connexion anonyme de secours si besoin)
+      let session = null;
+      try {
+        const sessionRes = await base44.auth.getSession?.();
+        session = sessionRes?.data?.session;
+      } catch (e) {
+        console.warn("Pas de session active récupérée");
+      }
+
+      if (!session) {
+        // Tentative de connexion anonyme automatique pour débloquer l'écriture en base
+        try {
+          if (base44.auth.signInAnonymously) {
+            await base44.auth.signInAnonymously();
+          }
+        } catch (anonErr) {
+          console.warn("Connexion anonyme non supportée ou échouée", anonErr);
+        }
+      }
+
+      // 2. Construction et enregistrement du programme
       const nouveauProgrammeData = {
         nom: programme.nom || 'Programme importé',
         description: 'Importé depuis un document',
@@ -85,7 +101,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
       onClose();
     } catch (err) {
       console.error("Erreur création programme:", err);
-      setErrorMsg(err?.message || "Erreur lors de l'enregistrement en base de données.");
+      setErrorMsg("Vous devez disposer d'une session active pour enregistrer. Vérifiez votre connexion.");
       setEtape('erreur');
     } finally {
       setLoading(false);
@@ -173,7 +189,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
               />
             </div>
 
-            <div className="rounded-xl border border-border overflow-hidden mb-5 max-h-48 overflow-y-auto" style={{ background: 'var(--surface)' }}>
+            <div className="rounded-xl border border-border overflow-hidden mb-5 max-h-48 overflow-y-auto" style="background: var(--surface)">
               {(programme.creneaux || []).map((cr, i) => (
                 <div key={i} className={`flex items-center gap-3 p-3 ${i > 0 ? 'border-t border-border' : ''}`}>
                   <span className="text-xs font-mono text-muted-foreground w-24 shrink-0">{cr.libelle}</span>
