@@ -1,18 +1,27 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import useTaskNotifications from '@/hooks/useTaskNotifications';
 import useDynamicAccent from '@/hooks/useDynamicAccent';
-import { LayoutDashboard, CheckSquare, Calendar, CalendarDays, BarChart2, User, Shield, Users, Target } from 'lucide-react';
+import { Home, CheckSquare, Calendar, CalendarDays, BarChart2, User, Shield, Users, Target } from 'lucide-react';
 
-const NAV = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+// 1. Navigation complète pour la Sidebar Desktop
+const DESKTOP_NAV = [
+  { path: '/', icon: Home, label: 'Accueil' },
   { path: '/taches', icon: CheckSquare, label: 'Tâches' },
-  { path: '/calendrier', icon: CalendarDays, label: 'Calendrier' },
-  { path: '/programmes', icon: Calendar, label: 'Programmes' },
   { path: '/concentration', icon: Shield, label: 'Focus' },
+  { path: '/programmes', icon: Calendar, label: 'Programmes' },
+  { path: '/calendrier', icon: CalendarDays, label: 'Calendrier' },
   { path: '/stats', icon: BarChart2, label: 'Stats' },
   { path: '/parent', icon: Users, label: 'Famille' },
   { path: '/objectifs', icon: Target, label: 'Objectifs' },
   { path: '/profil', icon: User, label: 'Profil' },
+];
+
+// 2. Navigation épurée pour le Bottom Nav Mobile (4 onglets sans scroll)
+const MOBILE_NAV = [
+  { path: '/', icon: Home, label: 'Accueil' },
+  { path: '/taches', icon: CheckSquare, label: 'Tâches' },
+  { path: '/concentration', icon: Shield, label: 'Focus' },
+  { path: '/programmes', icon: Calendar, label: 'Programmes' },
 ];
 
 export default function Layout() {
@@ -22,6 +31,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ background: 'var(--noir)' }}>
+      
       {/* Sidebar desktop */}
       <aside className="hidden md:flex flex-col w-20 lg:w-56 border-r border-border shrink-0 sticky top-0 h-screen" style={{ background: '#0D0D18' }}>
         <div className="p-4 lg:p-6 border-b border-border">
@@ -31,7 +41,7 @@ export default function Layout() {
           </div>
         </div>
         <nav className="flex-1 p-3 lg:p-4 space-y-1">
-          {NAV.map(({ path, icon: Icon, label }) => {
+          {DESKTOP_NAV.map(({ path, icon: Icon, label }) => {
             const active = location.pathname === path;
             return (
               <Link key={path} to={path}
@@ -55,20 +65,23 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {/* Bottom nav mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border z-50 overflow-x-auto no-scrollbar" style={{ background: '#0D0D18' }}>
-        <div className="flex min-w-max">
-          {NAV.map(({ path, icon: Icon, label }) => {
+      {/* Bottom nav mobile (Épuré à 4 onglets fixes sans défilement) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border z-50 px-2 py-1" style={{ background: '#0D0D18' }}>
+        <div className="flex w-full justify-around items-center">
+          {MOBILE_NAV.map(({ path, icon: Icon, label }) => {
             const active = location.pathname === path;
             return (
-              <Link key={path} to={path} className="flex flex-col items-center justify-center py-2 gap-0.5 min-w-[62px] shrink-0 px-1">
+              <Link key={path} to={path} className="flex flex-col items-center justify-center py-1.5 flex-1 transition-all">
                 <Icon size={20} style={{ color: active ? 'var(--gold)' : '#666677' }} />
-                <span className="text-[10px] font-semibold whitespace-nowrap" style={{ color: active ? 'var(--gold)' : '#666677' }}>{label}</span>
+                <span className="text-[10px] font-bold mt-0.5" style={{ color: active ? 'var(--gold)' : '#666677' }}>
+                  {label}
+                </span>
               </Link>
             );
           })}
         </div>
       </nav>
+
     </div>
   );
 }
