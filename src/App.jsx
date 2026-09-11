@@ -19,15 +19,15 @@ import Calendrier from './pages/Calendrier';
 import Parent from './pages/Parent';
 import Enfant from './pages/Enfant';
 import Objectifs from './pages/Objectifs';
-import Parametre from './pages/parametre'; // <--- 1. IMPORT DE VOTRE FICHIER
+import Parametre from './pages/parametre';
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: '#080810' }}>
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
       </div>
     );
@@ -38,13 +38,17 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
       navigateToLogin();
       return null;
     }
   }
 
-  // Render the main app
+  // Si l'utilisateur n'est pas connecté, afficher la page Login
+  if (!isAuthenticated || !user) {
+    return <Login />;
+  }
+
+  // Render the main app with all routes including programmes and import actions
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -59,7 +63,7 @@ const AuthenticatedApp = () => {
         <Route path="/parent" element={<Parent />} />
         <Route path="/objectifs" element={<Objectifs />} />
         <Route path="/profil" element={<Profil />} />
-        <Route path="/parametres" element={<Parametre />} /> {/* <--- 2. ROUTE AJOUTÉE */}
+        <Route path="/parametres" element={<Parametre />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
       <Route path="/enfant" element={<Enfant />} />
@@ -67,9 +71,7 @@ const AuthenticatedApp = () => {
   );
 };
 
-
 function App() {
-
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
@@ -79,7 +81,7 @@ function App() {
         <Toaster />
       </QueryClientProvider>
     </AuthProvider>
-  )
+  );
 }
 
-export default App
+export default App;
