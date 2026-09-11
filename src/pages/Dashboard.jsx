@@ -3,7 +3,7 @@ import { base44 } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { CATEGORIES, PRIORITES, JOURS } from '@/lib/coachData';
-import { CheckCircle2, Circle, Flame, ChevronRight, Zap } from 'lucide-react';
+import { CheckCircle2, Circle, Flame, ChevronRight, Zap, BarChart2, CalendarDays, Users, User } from 'lucide-react';
 import CoachMessage from '@/components/CoachMessage';
 import RoxMascot from '@/components/RoxMascot';
 import NotificationBanner from '@/components/NotificationBanner';
@@ -27,7 +27,7 @@ function CircularProgress({ pct, streak }) {
   const dash = (pct / 100) * circ;
 
   return (
-    <div className="flex flex-col items-center pt-8 pb-4">
+    <div className="flex flex-col items-center pt-4 pb-4">
       <div className="relative" style={{ width: 220, height: 220 }}>
         <svg width="220" height="220" viewBox="0 0 220 220" style={{ transform: 'rotate(-90deg)' }}>
           {/* Track */}
@@ -202,6 +202,46 @@ export default function Dashboard() {
             score={scoreDiscipline?.score || 100}
             streakLoss={streak === 0 && stats.length > 1}
           />
+        </div>
+
+        {/* --- MENU OUTILS & SUIVI (PLACÉ JUSTE EN DESSOUS DE LA MASCOTTE ROX) --- */}
+        <div className="my-3 p-3.5" style={{ ...card }}>
+          <p className="text-[10px] font-bold tracking-widest mb-2.5 px-1 uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            OUTILS & SUIVI
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            <Link 
+              to="/stats" 
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-center"
+            >
+              <BarChart2 size={18} style={{ color: 'var(--gold)' }} />
+              <span className="text-[10px] font-bold mt-1 text-white">Stats</span>
+            </Link>
+
+            <Link 
+              to="/calendrier" 
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-center"
+            >
+              <CalendarDays size={18} style={{ color: 'var(--gold)' }} />
+              <span className="text-[10px] font-bold mt-1 text-white">Planning</span>
+            </Link>
+
+            <Link 
+              to="/parent" 
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-center"
+            >
+              <Users size={18} style={{ color: 'var(--gold)' }} />
+              <span className="text-[10px] font-bold mt-1 text-white">Famille</span>
+            </Link>
+
+            <Link 
+              to="/profil" 
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-center"
+            >
+              <User size={18} style={{ color: 'var(--gold)' }} />
+              <span className="text-[10px] font-bold mt-1 text-white">Profil</span>
+            </Link>
+          </div>
         </div>
 
         {/* Anneau circulaire */}
