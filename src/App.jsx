@@ -18,6 +18,7 @@ import Calendrier from './pages/Calendrier';
 import Parent from './pages/Parent';
 import Enfant from './pages/Enfant';
 import Objectifs from './pages/Objectifs';
+import Parametre from './pages/parametre'; // <--- 1. IMPORT DE VOTRE FICHIER
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -57,6 +58,7 @@ const AuthenticatedApp = () => {
         <Route path="/parent" element={<Parent />} />
         <Route path="/objectifs" element={<Objectifs />} />
         <Route path="/profil" element={<Profil />} />
+        <Route path="/parametres" element={<Parametre />} /> {/* <--- 2. ROUTE AJOUTÉE */}
         <Route path="*" element={<PageNotFound />} />
       </Route>
       <Route path="/enfant" element={<Enfant />} />
