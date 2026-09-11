@@ -16,7 +16,7 @@ const HEURES = ['5h00','5h30','6h00','6h30','7h00','7h30','8h00','8h30','9h00'];
 const MANTRAS = [
   'Je fais au jour le jour, je résous au jour le jour mes problèmes.',
   "Je ne détourne pas les yeux, j'affronte avec calme.",
-  'La discipline est ma liberté.',
+  'La discipline me donne de la liberté.',
   'Petits efforts constants, grands résultats durables.',
   'Je suis la personne que je veux devenir.',
 ];
@@ -29,18 +29,41 @@ export default function OnboardingModal({ user, onDone }) {
   const [mantraPerso, setMantraPerso] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Fonction pour ignorer directement l'onboarding
+  function passer() {
+    localStorage.setItem('onboarding-done', 'true');
+    onDone({ 
+      objectif_principal: objectif?.label || 'Général', 
+      objectif_emoji: objectif?.emoji || '🎯', 
+      mantra: mantra || mantraPerso || '', 
+      heure_reveil: heure 
+    });
+  }
+
   async function terminer() {
     setSaving(true);
-    await base44.auth.updateMe({
-      objectif_principal: objectif.label,
-      objectif_emoji: objectif.emoji,
+    const resultObj = {
+      objectif_principal: objectif?.label || '',
+      objectif_emoji: objectif?.emoji || '',
       mantra: mantra || mantraPerso || '',
       heure_reveil: heure,
       premiere_connexion: false,
-    });
-    localStorage.setItem('onboarding-done', 'true');
-    onDone({ objectif_principal: objectif.label, objectif_emoji: objectif.emoji, mantra: mantra || mantraPerso, heure_reveil: heure });
-    setSaving(false);
+    };
+
+    try {
+      // Tente la mise à jour avec un délai d'attente maximum de 4s
+      await Promise.race([
+        base44.auth.updateMe(resultObj),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout réseau')), 4000))
+      ]);
+    } catch (error) {
+      console.warn("Mise à jour distante échouée ou délai dépassé :", error);
+    } finally {
+      // Sauvegarde locale et fermeture dans TOUS les cas pour débloquer l'utilisateur
+      localStorage.setItem('onboarding-done', 'true');
+      setSaving(false);
+      onDone(resultObj);
+    }
   }
 
   const prenom = user?.full_name?.split(' ')[0] || 'Champion';
@@ -48,11 +71,26 @@ export default function OnboardingModal({ user, onDone }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.95)' }}>
-      <div className="w-full max-w-sm animate-fade-in">
+      <div className="w-full max-w-sm animate-fade-in relative">
+
+        {/* Bouton Passer (Skip) disponible sur toutes les étapes */}
+        <div className="flex justify-between items-center mb-4">
+          <span className="text-xs tracking-widest text-white/30">
+            {etape > 0 ? `${etape} / 3` : 'BIENVENUE 👋'}
+          </span>
+          <button 
+            type="button"
+            onClick={passer}
+            className="text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 hover:border-white/30 transition-all text-white/70 hover:text-white"
+            style={{ background: '#1C1C1E' }}
+          >
+            Passer ➔
+          </button>
+        </div>
 
         {/* Étape 0 — Bienvenue */}
         {etape === 0 && (
-          <div className="text-center space-y-6">
+          <div className="text-center space-y-6 pt-2">
             <div className="text-7xl">👑</div>
             <div>
               <h1 className="text-3xl font-black text-white mb-2">Bienvenue {prenom}</h1>
@@ -70,8 +108,7 @@ export default function OnboardingModal({ user, onDone }) {
         {/* Étape 1 — Objectif */}
         {etape === 1 && (
           <div className="space-y-4">
-            <div className="mb-6">
-              <p className="text-xs tracking-widest text-white/30 mb-1">1 / 3</p>
+            <div className="mb-4">
               <h2 className="text-2xl font-black text-white">Ton objectif principal ?</h2>
               <p className="text-sm text-white/40 mt-1">Ça guide toute l'intelligence du coach.</p>
             </div>
@@ -88,7 +125,7 @@ export default function OnboardingModal({ user, onDone }) {
                     <p className="text-sm font-bold text-white">{obj.label}</p>
                     <p className="text-xs text-white/35">{obj.desc}</p>
                   </div>
-                  {objectif?.label === obj.label && <Check size={16} style={{ color: '#F97316', shrink: 0 }} />}
+                  {objectif?.label === obj.label && <Check size={16} className="shrink-0" style={{ color: '#F97316' }} />}
                 </button>
               ))}
             </div>
@@ -103,8 +140,7 @@ export default function OnboardingModal({ user, onDone }) {
         {/* Étape 2 — Mantra */}
         {etape === 2 && (
           <div className="space-y-4">
-            <div className="mb-6">
-              <p className="text-xs tracking-widest text-white/30 mb-1">2 / 3</p>
+            <div className="mb-4">
               <h2 className="text-2xl font-black text-white">Ta mantra</h2>
               <p className="text-sm text-white/40 mt-1">Une phrase qui te guide au quotidien. Affichée chaque jour.</p>
             </div>
@@ -135,8 +171,7 @@ export default function OnboardingModal({ user, onDone }) {
         {/* Étape 3 — Heure réveil */}
         {etape === 3 && (
           <div className="space-y-4">
-            <div className="mb-6">
-              <p className="text-xs tracking-widest text-white/30 mb-1">3 / 3</p>
+            <div className="mb-4">
               <h2 className="text-2xl font-black text-white">Tu te lèves à quelle heure ?</h2>
               <p className="text-sm text-white/40 mt-1">Pour planifier ta première tâche du matin.</p>
             </div>
