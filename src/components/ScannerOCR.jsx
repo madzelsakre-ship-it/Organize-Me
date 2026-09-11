@@ -20,6 +20,10 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setErrorMsg('');
 
     try {
+      // Récupération de la session active pour autoriser l'appel de lecture intelligente
+      const sessionResponse = await base44.auth.getSession?.();
+      const session = sessionResponse?.data?.session || null;
+
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       setImageUrl(file_url);
 
@@ -58,6 +62,10 @@ Règles :
             }
           }
         }
+      }, {
+        headers: session?.access_token ? {
+          Authorization: `Bearer ${session.access_token}`
+        } : {}
       });
 
       setProgramme(result);
@@ -79,20 +87,26 @@ Règles :
   async function validerProgramme() {
     if (!programme) return;
     setLoading(true);
-    const prog = await base44.entities.Programme.create({
-      nom: programme.nom || 'Programme scanné',
-      description: 'Importé par scanner IA',
-      couleur_theme: '#3498DB',
-      jours: JOURS.map((j, i) => ({ id: String(i), nom: j, actif: true })),
-      creneaux: (programme.creneaux || []).map((cr, i) => ({
-        id: `cr_${i}`,
-        ...cr,
-        cellules: {}
-      }))
-    });
-    setLoading(false);
-    onProgrammeCreated(prog);
-    onClose();
+    try {
+      const prog = await base44.entities.Programme.create({
+        nom: programme.nom || 'Programme scanné',
+        description: 'Importé par scanner intelligent',
+        couleur_theme: '#3498DB',
+        jours: JOURS.map((j, i) => ({ id: String(i), nom: j, actif: true })),
+        creneaux: (programme.creneaux || []).map((cr, i) => ({
+          id: `cr_${i}`,
+          ...cr,
+          cellules: {}
+        }))
+      });
+      onProgrammeCreated(prog);
+      onClose();
+    } catch (err) {
+      setErrorMsg("Erreur lors de l'enregistrement du programme.");
+      setEtape('erreur');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -102,7 +116,7 @@ Règles :
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Camera size={18} style={{ color: 'var(--gold)' }} />
-            <h2 className="text-base font-black text-foreground">Scanner OCR</h2>
+            <h2 className="text-base font-black text-foreground">Scanner de document</h2>
           </div>
           <button onClick={onClose}><X size={20} className="text-muted-foreground" /></button>
         </div>
@@ -111,7 +125,7 @@ Règles :
         {etape === 'upload' && (
           <div>
             <p className="text-sm text-muted-foreground mb-5">
-              Prenez en photo votre emploi du temps (papier, tableau, pdf…). L'IA va extraire tous les créneaux automatiquement.
+              Prenez en photo ou importez votre document (emploi du temps, tableau, PDF...). L'application s'occupe de tout structurer automatiquement.
             </p>
             <div
               onClick={() => fileRef.current?.click()}
@@ -119,7 +133,7 @@ Règles :
               style={{ background: 'var(--accent)' }}
             >
               <Upload size={32} className="text-muted-foreground mb-3" />
-              <p className="text-sm font-bold text-foreground">Cliquez pour sélectionner</p>
+              <p className="text-sm font-bold text-foreground">Cliquez pour importer un document</p>
               <p className="text-xs text-muted-foreground mt-1">Photo, capture d'écran, scan PDF…</p>
             </div>
             <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
@@ -133,8 +147,8 @@ Règles :
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--gold-dim)' }}>
               <Sparkles size={28} style={{ color: 'var(--gold)' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Analyse en cours…</p>
-            <p className="text-sm text-muted-foreground mb-6">L'IA lit votre emploi du temps</p>
+            <p className="text-base font-black text-foreground mb-2">Lecture en cours…</p>
+            <p className="text-sm text-muted-foreground mb-6">Extraction des créneaux et des horaires</p>
             <div className="flex gap-1.5">
               {[0, 1, 2].map(i => (
                 <div key={i} className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--gold)', animationDelay: `${i * 0.15}s` }} />
@@ -149,7 +163,7 @@ Règles :
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(231,76,60,0.15)' }}>
               <X size={28} style={{ color: '#E74C3C' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Scan impossible</p>
+            <p className="text-base font-black text-foreground mb-2">Impossible de lire le document</p>
             <p className="text-sm text-muted-foreground mb-6">{errorMsg}</p>
             <button onClick={() => lastFileRef.current ? handleFile(lastFileRef.current) : setEtape('upload')}
               className="w-full py-3 rounded-xl font-black text-sm"
@@ -164,7 +178,7 @@ Règles :
           <div>
             <div className="flex items-center gap-2 mb-4">
               <CheckCircle2 size={16} style={{ color: '#2ECC71' }} />
-              <p className="text-sm font-bold text-foreground">{programme.creneaux?.length || 0} créneaux détectés</p>
+              <p className="text-sm font-bold text-foreground">{programme.creneaux?.length || 0} créneaux détectés avec succès</p>
             </div>
 
             <div className="mb-4">
@@ -178,7 +192,7 @@ Règles :
 
             <div className="rounded-xl border border-border overflow-hidden mb-5 max-h-48 overflow-y-auto" style={{ background: 'var(--surface)' }}>
               {(programme.creneaux || []).length === 0 ? (
-                <p className="text-sm text-muted-foreground p-4 text-center">Aucun créneau détecté. Essayez une meilleure photo.</p>
+                <p className="text-sm text-muted-foreground p-4 text-center">Aucun créneau clair détecté. Essayez avec une autre photo.</p>
               ) : (
                 programme.creneaux.map((cr, i) => (
                   <div key={i} className={`flex items-center gap-3 p-3 ${i > 0 ? 'border-t border-border' : ''}`}>
