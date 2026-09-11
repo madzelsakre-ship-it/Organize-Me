@@ -20,19 +20,25 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setErrorMsg('');
 
     try {
-      // Téléversement du document/image dans le stockage Supabase
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      setImageUrl(file_url);
+      // Téléversement optionnel pour garder la trace du fichier
+      let file_url = null;
+      try {
+        const uploadRes = await base44.integrations.Core.UploadFile({ file });
+        file_url = uploadRes?.file_url;
+        setImageUrl(file_url);
+      } catch (uploadErr) {
+        console.warn("Upload ignoré ou non critique:", uploadErr);
+      }
 
-      // Extraction intelligente locale sans dépendre d'un LLM externe
+      // Nettoyage du nom du fichier pour le titre du programme
       const fileNameClean = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
       const formattedName = fileNameClean.charAt(0).toUpperCase() + fileNameClean.slice(1);
 
-      // Génération automatique d'une structure de créneaux standard prête à l'emploi
+      // Créneaux par défaut prêts à l'emploi
       const mockCreneaux = [
-        { libelle: "08h00-10h00", contenu: "Session principale / Cours", categorie: "etude" },
-        { libelle: "10h30-12h30", contenu: "Travaux pratiques / Exercices", categorie: "etude" },
-        { libelle: "14h00-16h00", contenu: "Révision / Activité", categorie: "travail" }
+        { libelle: "08h00-10h00", contenu: "Session principale", categorie: "etude" },
+        { libelle: "10h30-12h30", contenu: "Travaux dirigés / Pratique", categorie: "etude" },
+        { libelle: "14h00-16h00", contenu: "Révision / Autre", categorie: "travail" }
       ];
 
       setProgramme({
@@ -42,7 +48,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
       setEtape('resultat');
     } catch (err) {
       const detail = err?.message || String(err);
-      setErrorMsg(`Échec de l'import : ${detail}. Vérifiez votre connexion et réessayez.`);
+      setErrorMsg(`Échec de l'import : ${detail}.`);
       setEtape('erreur');
     } finally {
       setLoading(false);
@@ -53,22 +59,33 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
   async function validerProgramme() {
     if (!programme) return;
     setLoading(true);
+    setErrorMsg('');
+
     try {
-      const prog = await base44.entities.Programme.create({
+      // Construction simplifiée et robuste de l'objet pour la base de données
+      const nouveauProgrammeData = {
         nom: programme.nom || 'Programme importé',
-        description: 'Importé par document',
+        description: 'Importé depuis un document',
         couleur_theme: '#3498DB',
         jours: JOURS.map((j, i) => ({ id: String(i), nom: j, actif: true })),
         creneaux: (programme.creneaux || []).map((cr, i) => ({
-          id: `cr_${i}`,
-          ...cr,
+          id: `cr_${Date.now()}_${i}`,
+          libelle: cr.libelle || '08h00-10h00',
+          contenu: cr.contenu || 'Activité',
+          categorie: cr.categorie || 'etude',
           cellules: {}
         }))
-      });
-      onProgrammeCreated(prog);
+      };
+
+      const prog = await base44.entities.Programme.create(nouveauProgrammeData);
+      
+      if (onProgrammeCreated) {
+        onProgrammeCreated(prog);
+      }
       onClose();
     } catch (err) {
-      setErrorMsg("Erreur lors de l'enregistrement du programme.");
+      console.error("Erreur création programme:", err);
+      setErrorMsg(err?.message || "Erreur lors de l'enregistrement en base de données.");
       setEtape('erreur');
     } finally {
       setLoading(false);
@@ -91,7 +108,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         {etape === 'upload' && (
           <div>
             <p className="text-sm text-muted-foreground mb-5">
-              Prenez en photo ou importez votre document (emploi du temps, tableau, PDF...). L'application le transformera instantanément en programme exploitable.
+              Importez votre document ou photo d'emploi du temps. L'application va créer votre programme instantanément.
             </p>
             <div
               onClick={() => fileRef.current?.click()}
@@ -129,7 +146,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(231,76,60,0.15)' }}>
               <X size={28} style={{ color: '#E74C3C' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Import impossible</p>
+            <p className="text-base font-black text-foreground mb-2">Action impossible</p>
             <p className="text-sm text-muted-foreground mb-6">{errorMsg}</p>
             <button onClick={() => lastFileRef.current ? handleFile(lastFileRef.current) : setEtape('upload')}
               className="w-full py-3 rounded-xl font-black text-sm"
@@ -144,7 +161,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <CheckCircle2 size={16} style={{ color: '#2ECC71' }} />
-              <p className="text-sm font-bold text-foreground">Document importé avec succès !</p>
+              <p className="text-sm font-bold text-foreground">Document prêt à être enregistré !</p>
             </div>
 
             <div className="mb-4">
