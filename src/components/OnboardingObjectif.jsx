@@ -20,9 +20,20 @@ export default function OnboardingObjectif({ onClose }) {
     const objectif = custom.trim() || selected;
     if (!objectif) return;
     setSaving(true);
-    await base44.auth.updateMe({ objectif_principal: objectif });
-    setSaving(false);
-    onClose();
+
+    try {
+      // 1. Sauvegarde avec timeout de sécurité
+      await Promise.race([
+        base44.auth.updateMe({ objectif_principal: objectif }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
+      ]);
+    } catch (err) {
+      console.error("Erreur de sauvegarde ou réseau :", err);
+    } finally {
+      // 2. Réinitialise et ferme TOUJOURS la modale pour ne jamais bloquer l'utilisateur
+      setSaving(false);
+      onClose();
+    }
   }
 
   const objectifFinal = custom.trim() || selected;
@@ -36,9 +47,19 @@ export default function OnboardingObjectif({ onClose }) {
             <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--gold)' }}>BIENVENUE 👋</p>
             <h2 className="text-lg font-black text-foreground mt-1">Quel est ton objectif<br />principal ?</h2>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-accent/50 mt-1">
-            <X size={16} className="text-muted-foreground" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              type="button"
+              onClick={onClose} 
+              className="text-xs font-bold px-2 py-1 rounded-lg transition-colors"
+              style={{ color: 'var(--gold)' }}
+            >
+              Passer
+            </button>
+            <button onClick={onClose} className="p-1 rounded-lg hover:bg-accent/50">
+              <X size={16} className="text-muted-foreground" />
+            </button>
+          </div>
         </div>
 
         <p className="text-xs text-muted-foreground mb-4">Cela permet au coach IA de personnaliser tes rappels et défis.</p>
