@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/supabaseClient';
 import { CATEGORIES, JOURS, TEMPLATES, genererProgramme } from '@/lib/coachData';
-import { Plus, Star, Trash2, X, ChevronRight, Clock, Sparkles, Pencil } from 'lucide-react';
+import { Plus, Star, Trash2, X, ChevronRight, Clock, Sparkles, Pencil, Camera, Upload } from 'lucide-react';
 import ScannerOCR from '@/components/ScannerOCR';
 import GenerateurIA from '@/components/GenerateurIA';
 
@@ -359,19 +359,23 @@ export default function Programmes() {
     );
   }
 
-  // Vue nouveau programme
+  // Vue nouveau programme (avec l'import/scanner intégré ici)
   if (vue === 'nouveau') {
     return (
       <div className="p-4 lg:p-8 max-w-xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <button onClick={() => { setVue('liste'); setEtape(0); setVoie(null); }} className="text-sm font-semibold text-muted-foreground hover:text-foreground">← Retour</button>
-          <div className="h-1 flex-1 mx-4 bg-border rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all" style={{ width: `${((etape + 1) / 3) * 100}%`, background: 'var(--gold)' }} />
-          </div>
-          <span className="text-xs font-bold text-muted-foreground">{etape + 1}/3</span>
+          {voie !== 'scanner' && (
+            <>
+              <div className="h-1 flex-1 mx-4 bg-border rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${((etape + 1) / 3) * 100}%`, background: 'var(--gold)' }} />
+              </div>
+              <span className="text-xs font-bold text-muted-foreground">{etape + 1}/3</span>
+            </>
+          )}
         </div>
 
-        {/* Étape 1 — Choisir la voie */}
+        {/* Étape 1 — Choisir la voie (incluant l'import / scanner) */}
         {etape === 0 && (
           <div className="animate-fade-in">
             <h2 className="text-xl font-black text-foreground mb-2">Nouveau programme</h2>
@@ -380,9 +384,17 @@ export default function Programmes() {
               {[
                 { id: 'generer', emoji: '✨', titre: 'Génération guidée', desc: 'Quelques questions → programme automatique', color: 'var(--gold)' },
                 { id: 'template', emoji: '📋', titre: 'Utiliser un template', desc: 'Modèle prêt à l\'emploi (étudiant, sportif…)', color: '#9B59B6' },
+                { id: 'scanner', emoji: '📷', titre: 'Importer un fichier / Scanner', desc: 'Importer une image ou un document (OCR)', color: '#2ECC71' },
                 { id: 'manuel', emoji: '🛠️', titre: 'Créer manuellement', desc: 'Partir d\'un tableau vide', color: '#3498DB' },
               ].map(v => (
-                <button key={v.id} onClick={() => { setVoie(v.id); setEtape(1); }}
+                <button key={v.id} onClick={() => { 
+                  if (v.id === 'scanner') {
+                    setShowScanner(true);
+                  } else {
+                    setVoie(v.id); 
+                    setEtape(1); 
+                  }
+                }}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left hover:border-gold"
                   style={{ background: 'var(--surface)', borderColor: voie === v.id ? 'var(--gold)' : 'var(--border)' }}
                 >
@@ -395,6 +407,19 @@ export default function Programmes() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Modal du Scanner déclenché depuis "+ Nouveau" */}
+        {showScanner && (
+          <ScannerOCR
+            onProgrammeCreated={prog => {
+              setProgrammes(prev => [prog, ...prev]);
+              setProgSelectionne(prog);
+              setVue('detail');
+              setShowScanner(false);
+            }}
+            onClose={() => setShowScanner(false)}
+          />
         )}
 
         {/* Étape 2 — Détails */}
@@ -514,7 +539,7 @@ export default function Programmes() {
     );
   }
 
-  // Vue liste corrigée pour mobile
+  // Vue liste principale (le bouton Scanner a été retiré d'ici pour être mis sous "+ Nouveau")
   return (
     <div className="p-4 lg:p-8 max-w-3xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -529,12 +554,6 @@ export default function Programmes() {
           >
             <Sparkles size={14} /> IA
           </button>
-          <button onClick={() => setShowScanner(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm border border-border hover:border-gold transition-colors"
-            style={{ background: 'var(--surface)', color: 'var(--gold)' }}
-          >
-            📷 Scanner
-          </button>
           <button onClick={() => { setVue('nouveau'); setEtape(0); setVoie(null); }}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm"
             style={{ background: 'var(--gold)', color: '#080810' }}
@@ -543,13 +562,6 @@ export default function Programmes() {
           </button>
         </div>
       </div>
-
-      {showScanner && (
-        <ScannerOCR
-          onProgrammeCreated={prog => setProgrammes(prev => [prog, ...prev])}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
 
       {showGenerateurIA && (
         <GenerateurIA
