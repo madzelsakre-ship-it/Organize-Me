@@ -22,7 +22,7 @@ import Objectifs from './pages/Objectifs';
 import Parametre from './pages/parametre';
 
 const AuthenticatedApp = () => {
-  const { user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -43,12 +43,7 @@ const AuthenticatedApp = () => {
     }
   }
 
-  // Si l'utilisateur n'est pas connecté, afficher la page Login
-  if (!isAuthenticated || !user) {
-    return <Login />;
-  }
-
-  // Render the main app with all routes including programmes and import actions
+  // Render the main app directly, making it fully public/accessible without forced login
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -67,6 +62,8 @@ const AuthenticatedApp = () => {
         <Route path="*" element={<PageNotFound />} />
       </Route>
       <Route path="/enfant" element={<Enfant />} />
+      {/* Route de secours pour accéder au Login explicitement si besoin */}
+      <Route path="/login" element={<Login />} />
     </Routes>
   );
 };
@@ -85,3 +82,4 @@ function App() {
 }
 
 export default App;
+à
