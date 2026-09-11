@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
-import { Target, Flame, CheckCircle2, LogOut, Pencil, Shield, ChevronRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Target, Flame, CheckCircle2, Pencil, AlertTriangle, ShieldCheck } from 'lucide-react';
 import OnboardingModal from '@/components/OnboardingModal';
 
 export default function Profil() {
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
   const [stats, setStats] = useState([]);
   const [taches, setTaches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +25,11 @@ export default function Profil() {
   const streak = stats.length > 0 ? (stats[0].streak || 0) : 0;
   const totalFaites = taches.filter(t => t.faite).length;
 
+  // Simulation vérification du respect du temps / tâches aujourd'hui
+  const aujourdhui = new Date().toISOString().split('T')[0];
+  const tachesAujourdhui = taches.filter(t => t.created_date?.startsWith(aujourdhui) || t.date === aujourdhui);
+  const retardDetecte = tachesAujourdhui.length > 0 && tachesAujourdhui.every(t => !t.faite);
+
   function getNiveau() {
     if (streak >= 30) return { label: '🏆 Maître', color: '#9B59B6' };
     if (streak >= 14) return { label: '🥇 Expert', color: '#F39C12' };
@@ -37,22 +40,22 @@ export default function Profil() {
 
   const niveau = getNiveau();
 
-  function handleLogout() {
-    base44.auth.logout();
-  }
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--gold)', borderTopColor: 'transparent' }} /></div>;
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--gold)', borderTopColor: 'transparent' }} />
+    </div>
+  );
 
   return (
-    <div className="p-4 lg:p-8 max-w-2xl mx-auto">
-      <h1 className="text-xl font-black text-foreground mb-6">Profil</h1>
+    <div className="p-4 lg:p-8 max-w-2xl mx-auto space-y-5 pb-28">
+      <h1 className="text-xl font-black text-foreground mb-4">Profil</h1>
 
       {showOnboarding && (
         <OnboardingModal user={currentUser} onDone={() => setShowOnboarding(false)} />
       )}
 
-      {/* Carte profil */}
-      <div className="rounded-2xl border border-border p-6 mb-6 relative overflow-hidden" style={{ background: 'var(--surface)' }}>
+      {/* Carte profil principal avec Statut */}
+      <div className="rounded-2xl border border-border p-6 relative overflow-hidden" style={{ background: 'var(--surface)' }}>
         <div className="absolute inset-0 opacity-5" style={{ background: 'radial-gradient(circle at 80% 20%, var(--gold), transparent 60%)' }} />
         <div className="relative flex items-start gap-4">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0" style={{ background: 'var(--gold-dim)', border: '2px solid var(--gold)' }}>
@@ -60,12 +63,33 @@ export default function Profil() {
           </div>
           <div className="flex-1">
             <h2 className="text-lg font-black text-foreground">{currentUser?.full_name || 'Champion'}</h2>
-            <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
-            <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-lg text-xs font-bold" style={{ background: `${niveau.color}20`, color: niveau.color }}>
-              {niveau.label}
+            <p className="text-xs text-muted-foreground">{currentUser?.email}</p>
+            
+            {/* Statuts du compte */}
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <ShieldCheck size={11} />
+                {currentUser?.role === 'parent' ? 'Parent Vigile' : 'Enfant suivi'}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold" style={{ background: `${niveau.color}20`, color: niveau.color }}>
+                {niveau.label}
+              </span>
             </div>
           </div>
         </div>
+
+        {/* Encart Alarme / Respect du temps */}
+        {retardDetecte && (
+          <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-500 font-bold shrink-0 animate-pulse">
+              <AlertTriangle size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-red-500">Temps non respecté !</p>
+              <p className="text-[10px] text-red-400/80 truncate">Alerte envoyée : aucune tâche complétée pour le moment.</p>
+            </div>
+          </div>
+        )}
 
         {/* Objectif */}
         <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
@@ -82,16 +106,18 @@ export default function Profil() {
               <p className="text-xs text-muted-foreground mt-0.5">⏰ Réveil {currentUser.heure_reveil}</p>
             )}
           </div>
-          <button onClick={() => setShowOnboarding(true)}
+          <button 
+            onClick={() => setShowOnboarding(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border border-border hover:border-gold transition-colors"
-            style={{ background: 'var(--accent)', color: 'var(--gold)' }}>
+            style={{ background: 'var(--accent)', color: 'var(--gold)' }}
+          >
             <Pencil size={12} /> Modifier
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-3">
         {[
           { icon: Flame, label: 'Streak', value: `${streak}j`, color: '#F39C12' },
           { icon: CheckCircle2, label: 'Tâches faites', value: totalFaites, color: '#2ECC71' },
@@ -106,7 +132,7 @@ export default function Profil() {
       </div>
 
       {/* Niveaux */}
-      <div className="rounded-2xl border border-border overflow-hidden mb-6" style={{ background: 'var(--surface)' }}>
+      <div className="rounded-2xl border border-border overflow-hidden" style={{ background: 'var(--surface)' }}>
         <div className="p-4 border-b border-border">
           <p className="text-xs font-bold tracking-widest text-muted-foreground">PROGRESSION DES NIVEAUX</p>
         </div>
@@ -124,7 +150,9 @@ export default function Profil() {
                 <div className="flex items-center gap-3">
                   <span className="text-base">{nv.label.split(' ')[0]}</span>
                   <div>
-                    <p className="text-sm font-semibold" style={{ color: atteint ? nv.color : '#666677' }}>{nv.label.split(' ').slice(1).join(' ')}</p>
+                    <p className="text-sm font-semibold" style={{ color: atteint ? nv.color : '#666677' }}>
+                      {nv.label.split(' ').slice(1).join(' ')}
+                    </p>
                     <p className="text-xs text-muted-foreground">{nv.requis} jours de streak requis</p>
                   </div>
                 </div>
@@ -134,27 +162,6 @@ export default function Profil() {
           })}
         </div>
       </div>
-
-      {/* Contrôle parental */}
-      <button onClick={() => navigate('/parent')}
-        className="w-full flex items-center gap-3 p-4 rounded-2xl border border-border mb-6 transition-all hover:border-gold"
-        style={{ background: 'var(--surface)' }}>
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--gold-dim)' }}>
-          <Shield size={20} style={{ color: 'var(--gold)' }} />
-        </div>
-        <div className="flex-1 text-left">
-          <p className="text-sm font-black text-foreground">Contrôle parental</p>
-          <p className="text-xs text-muted-foreground">Suivez en temps réel le parcours de votre enfant</p>
-        </div>
-        <ChevronRight size={18} style={{ color: 'var(--gold)' }} />
-      </button>
-
-      {/* Déconnexion */}
-      <button onClick={handleLogout}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-destructive/40 text-sm font-bold text-destructive hover:bg-destructive/10 transition-colors"
-      >
-        <LogOut size={16} /> Se déconnecter
-      </button>
     </div>
   );
 }
