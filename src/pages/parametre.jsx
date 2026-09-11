@@ -3,13 +3,13 @@ import { base44 } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { 
   Shield, LogOut, ChevronRight, Bell, Lock, Clock, 
-  Smartphone, Moon, Volume2, UserCheck, HelpCircle, Info, RefreshCw 
+  Smartphone, Moon, Volume2, UserCheck, HelpCircle, Info, RefreshCw, User, Database, CheckCircle2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Parametre() {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   // États pour les différents réglages
   const [alarmesActives, setAlarmesActives] = useState(true);
@@ -17,19 +17,70 @@ export default function Parametre() {
   const [modeSombre, setModeSombre] = useState(true);
   const [sonsActifs, setSonsActifs] = useState(true);
   const [notificationsPush, setNotificationsPush] = useState(true);
+  const [savedMessage, setSavedMessage] = useState(false);
 
   function handleLogout() {
     base44.auth.logout();
   }
 
+  // Simulation d'une sauvegarde des préférences
+  const handleSaveSettings = () => {
+    setSavedMessage(true);
+    setTimeout(() => setSavedMessage(false), 3000);
+  };
+
   return (
-    <div className="p-4 lg:p-8 max-w-2xl mx-auto space-y-5 pb-28">
-      <div>
-        <h1 className="text-xl font-black text-foreground">Réglages & Paramètres</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Personnalisez votre expérience et gérez votre sécurité</p>
+    <div className="p-4 lg:p-8 max-w-2xl mx-auto space-y-6 pb-28">
+      {/* En-tête avec bouton de sauvegarde rapide */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-black text-foreground">Réglages & Paramètres</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Personnalisez votre expérience et gérez votre sécurité</p>
+        </div>
+        <button 
+          onClick={handleSaveSettings}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+          style={{ background: 'var(--gold-dim)', color: 'var(--gold)', border: '1px solid var(--gold)' }}
+        >
+          {savedMessage ? <CheckCircle2 size={14} /> : <RefreshCw size={14} />}
+          {savedMessage ? "Enregistré" : "Sauvegarder"}
+        </button>
       </div>
 
-      {/* 1. CONTRÔLE PARENTAL & FAMILLE */}
+      {/* 1. SECTION COMPTE & PROFIL (Dynamique selon la connexion) */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-bold tracking-widest text-muted-foreground px-1">COMPTE & UTILISATEUR</p>
+        <div className="p-4 rounded-2xl border border-border flex items-center justify-between" style={{ background: 'var(--surface)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--gold-dim)' }}>
+              <User size={20} style={{ color: 'var(--gold)' }} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-foreground">
+                {isAuthenticated && user ? (user.email || "Compte Actif") : "Mode Invité (Anonyme)"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isAuthenticated && user ? "Connecté à l'espace cloud sécurisé" : "Accès libre sans authentification requise"}
+              </p>
+            </div>
+          </div>
+          {!isAuthenticated ? (
+            <button 
+              onClick={() => navigate('/login')}
+              className="text-xs font-bold px-3.5 py-2 rounded-xl text-foreground transition-all hover:opacity-90"
+              style={{ background: 'var(--gold)', color: '#000' }}
+            >
+              Se connecter
+            </button>
+          ) : (
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Vérifié
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* 2. CONTRÔLE PARENTAL & FAMILLE */}
       <div className="space-y-2">
         <p className="text-[10px] font-bold tracking-widest text-muted-foreground px-1">FAMILLE & SÉCURITÉ</p>
         <button 
@@ -63,7 +114,7 @@ export default function Parametre() {
         </div>
       </div>
 
-      {/* 2. RÈGLES DE DISCIPLINE & ALARMES */}
+      {/* 3. RÈGLES DE DISCIPLINE & ALARMES */}
       <div className="space-y-2">
         <p className="text-[10px] font-bold tracking-widest text-muted-foreground px-1">DISCIPLINE & RAPPELS</p>
         <div className="p-4 rounded-2xl border border-border space-y-4" style={{ background: 'var(--surface)' }}>
@@ -117,11 +168,11 @@ export default function Parametre() {
         </div>
       </div>
 
-      {/* 3. PRÉFÉRENCES DE L'APPLICATION */}
+      {/* 4. PRÉFÉRENCES DE L'APPLICATION */}
       <div className="space-y-2">
-        <p className="text-[10px] font-bold tracking-widest text-muted-foreground px-1">PRÉFÉRENCES</p>
+        <p className="text-[10px] font-bold tracking-widest text-muted-foreground px-1">PRÉFÉRENCES & AFFICHAGE</p>
         <div className="p-4 rounded-2xl border border-border space-y-4" style={{ background: 'var(--surface)' }}>
-          
+
           {/* Mode Sombre */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -163,7 +214,32 @@ export default function Parametre() {
         </div>
       </div>
 
-      {/* 4. AIDE & À PROPOS */}
+      {/* 5. GESTION DES DONNÉES & STOCKAGE */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-bold tracking-widest text-muted-foreground px-1">DONNÉES & CACHE</p>
+        <div className="p-4 rounded-2xl border border-border flex items-center justify-between" style={{ background: 'var(--surface)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-400 shrink-0">
+              <Database size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">Effacer le stockage local</p>
+              <p className="text-xs text-muted-foreground">Nettoyer les caches et fichiers temporaires</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              localStorage.clear();
+              alert("Cache local nettoyé avec succès !");
+            }}
+            className="text-xs font-bold px-3 py-1.5 rounded-xl border border-border text-foreground hover:border-amber-500 hover:text-amber-500 transition-colors"
+          >
+            Nettoyer
+          </button>
+        </div>
+      </div>
+
+      {/* 6. AIDE & À PROPOS */}
       <div className="space-y-2">
         <p className="text-[10px] font-bold tracking-widest text-muted-foreground px-1">SUPPORT & INFORMATIONS</p>
         <div className="rounded-2xl border border-border divide-y divide-border overflow-hidden" style={{ background: 'var(--surface)' }}>
@@ -174,7 +250,7 @@ export default function Parametre() {
             </div>
             <ChevronRight size={16} className="text-muted-foreground" />
           </button>
-          
+
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <Info size={18} className="text-muted-foreground" />
@@ -185,15 +261,17 @@ export default function Parametre() {
         </div>
       </div>
 
-      {/* 5. DÉCONNEXION */}
-      <div className="pt-2">
-        <button 
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-destructive/40 text-sm font-bold text-destructive hover:bg-destructive/10 transition-colors"
-        >
-          <LogOut size={16} /> Se déconnecter de la session
-        </button>
-      </div>
+      {/* 7. DÉCONNEXION */}
+      {isAuthenticated && (
+        <div className="pt-2">
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl border border-destructive/40 text-sm font-bold text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut size={16} /> Se déconnecter de la session
+          </button>
+        </div>
+      )}
     </div>
   );
 }
