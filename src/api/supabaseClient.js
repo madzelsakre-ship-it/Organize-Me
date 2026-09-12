@@ -61,14 +61,14 @@ function createEntity(entityName) {
     async create(payload) {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
-      const user = sessionData.session?.user;
-      if (!user) {
+      const userId = sessionData.session?.user?.id;
+      if (!userId) {
         throw new Error('Vous devez être connecté pour créer des données.');
       }
 
       const { data, error } = await supabase
         .from(tableName)
-        .insert({ ...payload, created_by: payload.created_by || user.email })
+        .insert({ ...payload, user_id: payload.user_id || userId })
         .select()
         .single();
       if (error) throw error;
