@@ -1,12 +1,56 @@
 import { useState, useRef } from 'react';
+import { createWorker } from 'tesseract.js';
 import { Camera, Upload, X, CheckCircle2, Loader2, Calendar } from 'lucide-react';
 import { JOURS } from '@/lib/coachData';
+
+const CATEGORIE_KEYWORDS = {
+  etude: ['cours', 'école', 'ecole', 'classe', 'devoir', 'étude', 'etude', 'lecture', 'révision', 'revision'],
+  sport: ['sport', 'gym', 'foot', 'course', 'musculation', 'entraînement', 'entrainement', 'natation'],
+  travail: ['travail', 'boulot', 'réunion', 'reunion', 'bureau', 'job'],
+  repas: ['repas', 'déjeuner', 'dejeuner', 'diner', 'dîner', 'petit-déjeuner', 'petit dejeuner', 'manger'],
+  sommeil: ['dodo', 'sommeil', 'dormir', 'nuit', 'sieste', 'coucher'],
+  priere: ['prière', 'priere', 'salat', 'messe', 'culte'],
+  loisir: ['loisir', 'jeu', 'film', 'sortie', 'détente', 'detente', 'repos'],
+};
+
+function deviner_categorie(texte) {
+  const t = texte.toLowerCase();
+  for (const [cat, mots] of Object.entries(CATEGORIE_KEYWORDS)) {
+    if (mots.some(m => t.includes(m))) return cat;
+  }
+  return 'etude';
+}
+
+function extraire_creneaux(texteBrut) {
+  const lignes = texteBrut.split('\n').map(l => l.trim()).filter(Boolean);
+  const regexHoraire = /(\d{1,2})\s*[h:]\s*(\d{0,2})\s*[-–à]{1,3}\s*(\d{1,2})\s*[h:]\s*(\d{0,2})/i;
+  const creneaux = [];
+
+  lignes.forEach((ligne, i) => {
+    const match = ligne.match(regexHoraire);
+    if (!match) return;
+
+    const [full, h1, m1, h2, m2] = match;
+    const libelle = `${h1.padStart(2, '0')}h${(m1 || '00').padStart(2, '0')}-${h2.padStart(2, '0')}h${(m2 || '00').padStart(2, '0')}`;
+
+    let contenu = ligne.replace(full, '').replace(/[:\-–]/g, '').trim();
+    if (!contenu && lignes[i + 1] && !regexHoraire.test(lignes[i + 1])) {
+      contenu = lignes[i + 1];
+    }
+    if (!contenu) contenu = 'Activité';
+
+    creneaux.push({ libelle, contenu, categorie: deviner_categorie(contenu) });
+  });
+
+  return creneaux.slice(0, 20);
+}
 
 export default function ScannerOCR({ onProgrammeCreated, onClose }) {
   const [etape, setEtape] = useState('upload');
   const [programme, setProgramme] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [progression, setProgression] = useState(0);
   const fileRef = useRef();
   const lastFileRef = useRef();
 
@@ -16,27 +60,37 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setLoading(true);
     setEtape('analyse');
     setErrorMsg('');
+    setProgression(0);
 
+    let worker;
     try {
       const fileNameClean = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
       const formattedName = fileNameClean.charAt(0).toUpperCase() + fileNameClean.slice(1);
 
-      const mockCreneaux = [
-        { libelle: "08h00-10h00", contenu: "Session principale", categorie: "etude" },
-        { libelle: "10h30-12h30", contenu: "Travaux dirigés", categorie: "etude" },
-        { libelle: "14h00-16h00", contenu: "Révision", categorie: "travail" }
-      ];
+      worker = await createWorker('fra', 1, {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            setProgression(Math.round(m.progress * 100));
+          }
+        },
+      });
+
+      const { data: { text } } = await worker.recognize(file);
+      const creneaux = extraire_creneaux(text);
 
       setProgramme({
         nom: formattedName && formattedName !== "File" ? formattedName : "Programme importé",
-        creneaux: mockCreneaux
+        creneaux: creneaux.length > 0 ? creneaux : [
+          { libelle: "08h00-10h00", contenu: "Activité (à compléter)", categorie: "etude" }
+        ]
       });
       setEtape('resultat');
     } catch (err) {
-      setErrorMsg(`Erreur : ${err?.message || String(err)}`);
+      setErrorMsg(`Erreur : ${err?.message || String(err)}. Essayez une photo plus nette.`);
       setEtape('erreur');
     } finally {
       setLoading(false);
+      if (worker) await worker.terminate();
       if (fileRef.current) fileRef.current.value = '';
     }
   }
@@ -46,7 +100,6 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setLoading(true);
 
     try {
-      // Création d'un objet programme propre et structuré
       const nouveauProgramme = {
         id: `prog_${Date.now()}`,
         nom: programme.nom || 'Programme importé',
@@ -62,7 +115,6 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         }))
       };
 
-      // Sauvegarde locale de secours pour que l'application l'affiche instantanément
       const saved = JSON.parse(localStorage.getItem('mes_programmes') || '[]');
       localStorage.setItem('mes_programmes', JSON.stringify([nouveauProgramme, ...saved]));
 
@@ -104,9 +156,9 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
             >
               <Upload size={32} className="text-muted-foreground mb-3" />
               <p className="text-sm font-bold text-foreground">Cliquez pour importer un document</p>
-              <p className="text-xs text-muted-foreground mt-1">Photo, capture, PDF…</p>
+              <p className="text-xs text-muted-foreground mt-1">Photo, capture… (texte net de préférence)</p>
             </div>
-            <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+            <input ref={fileRef} type="file" accept="image/*" className="hidden"
               onChange={e => handleFile(e.target.files[0])} />
           </div>
         )}
@@ -116,7 +168,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--gold-dim)' }}>
               <Calendar size={28} style={{ color: 'var(--gold)' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Traitement en cours…</p>
+            <p className="text-base font-black text-foreground mb-2">Lecture en cours… {progression}%</p>
             <div className="flex gap-1.5 mt-2">
               {[0, 1, 2].map(i => (
                 <div key={i} className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--gold)', animationDelay: `${i * 0.15}s` }} />
