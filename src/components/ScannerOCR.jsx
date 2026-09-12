@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { createWorker } from 'tesseract.js';
 import { base44 } from '@/api/supabaseClient';
-import { Camera, Upload, X, CheckCircle2, Loader2, Calendar } from 'lucide-react';
+import { Camera, Upload, X, CheckCircle2, Loader2, Calendar, Edit3 } from 'lucide-react';
 import { JOURS } from '@/lib/coachData';
 
 const CATEGORIE_KEYWORDS = {
@@ -36,32 +36,6 @@ function fileToDataURL(file) {
   });
 }
 
-// --- Parseur simple (liste, une ligne = un horaire + une activité) ---
-function extraire_creneaux_simple(texteBrut) {
-  const lignes = texteBrut.split('\n').map(l => l.trim()).filter(Boolean);
-  const regexHoraire = /(\d{1,2})\s*[h:]\s*(\d{0,2})\s*[-–à]{1,3}\s*(\d{1,2})\s*[h:]\s*(\d{0,2})/i;
-  const creneaux = [];
-
-  lignes.forEach((ligne, i) => {
-    const match = ligne.match(regexHoraire);
-    if (!match) return;
-
-    const [full, h1, m1, h2, m2] = match;
-    const libelle = `${h1.padStart(2, '0')}h${(m1 || '00').padStart(2, '0')}-${h2.padStart(2, '0')}h${(m2 || '00').padStart(2, '0')}`;
-
-    let contenu = ligne.replace(full, '').replace(/[:\-–]/g, '').trim();
-    if (!contenu && lignes[i + 1] && !regexHoraire.test(lignes[i + 1])) {
-      contenu = lignes[i + 1];
-    }
-    if (!contenu) contenu = 'Activité';
-
-    creneaux.push({ libelle, contenu, categorie: deviner_categorie(contenu) });
-  });
-
-  return creneaux.slice(0, 20);
-}
-
-// --- Parseur de tableau (grille avec colonnes = jours) basé sur les positions des mots ---
 function extraire_mots(dataTesseract) {
   const mots = [];
   const blocks = dataTesseract?.blocks || [];
@@ -108,13 +82,12 @@ function grouper_en_lignes(mots) {
 
 function extraire_tableau(mots) {
   const lignes = grouper_en_lignes(mots);
-
   let headerIndex = -1;
   let colonnesJours = null;
 
   for (let i = 0; i < lignes.length; i++) {
     const motsJours = lignes[i].mots.filter(m => NOMS_JOURS.includes(normaliser(m.text)));
-    if (motsJours.length >= 4) {
+    if (motsJours.length >= 3) {
       headerIndex = i;
       colonnesJours = motsJours
         .map(m => ({ jour: normaliser(m.text), centre: (m.x0 + m.x1) / 2 }))
@@ -123,9 +96,7 @@ function extraire_tableau(mots) {
     }
   }
 
-  if (headerIndex === -1 || !colonnesJours || colonnesJours.length < 4) {
-    return null; // Pas de tableau détecté
-  }
+  if (headerIndex === -1 || !colonnesJours || colonnesJours.length < 3) return null;
 
   const bornes = colonnesJours.map((col, i) => ({
     jour: col.jour,
@@ -171,57 +142,25 @@ function normaliser_horaire(texteHoraire) {
 
 function construire_creneaux_depuis_tableau(tableau) {
   return tableau.map(({ horaire, parJour }) => {
-    const valeurs = Object.values(parJour);
-    const frequences = {};
-    valeurs.forEach(v => { frequences[v] = (frequences[v] || 0) + 1; });
-    const contenuPrincipal = Object.entries(frequences).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Activité';
-
+    // ParJour contient directement les valeurs par jour (ex: { 'lundi': 'Maths', 'mardi': 'Sport' })
     const cellules = {};
-    NOMS_JOURS.forEach((jour, idx) => {
-      if (parJour[jour] && parJour[jour] !== contenuPrincipal) {
-        cellules[String(idx)] = parJour[jour];
+    NOMS_JOURS.forEach((jourNom, idx) => {
+      if (parJour[jourNom]) {
+        cellules[String(idx)] = parJour[jourNom];
       }
     });
 
+    // Valeur par défaut pour le contenu principal
+    const premierTexte = Object.values(parJour)[0] || 'Activité';
+
     return {
       libelle: normaliser_horaire(horaire),
-      contenu: contenuPrincipal,
-      categorie: deviner_categorie(contenuPrincipal),
+      contenu: premierTexte,
+      categorie: deviner_categorie(premierTexte),
       cellules,
     };
   });
 }
-
-const PROGRAMME_BOGOU_SAKRE = {
-  nom: "Programme Hebdomadaire — Bogou Sakré",
-  creneaux: [
-    { libelle: "03h25-03h45", contenu: "Prière", categorie: "spiritual", cellules: { "6": "Prière" } },
-    { libelle: "06h30-06h30", contenu: "Réveil", categorie: "sante", cellules: {} },
-    { libelle: "06h30-06h40", contenu: "Méditation & Sport", categorie: "spiritual", cellules: {} },
-    { libelle: "06h40-06h55", contenu: "Préparation", categorie: "autre", cellules: {} },
-    { libelle: "07h00-07h15", contenu: "Petit déjeuner", categorie: "sante", cellules: {} },
-    { libelle: "07h20-07h30", contenu: "Prière", categorie: "spiritual", cellules: {} },
-    { libelle: "07h30-07h50", contenu: "Lecture", categorie: "etude", cellules: {} },
-    { libelle: "08h00-08h00", contenu: "Départ", categorie: "autre", cellules: { "6": "" } },
-    { libelle: "12h25-12h40", contenu: "Lecture", categorie: "etude", cellules: { "5": "Arrivée", "6": "" } },
-    { libelle: "13h00-13h20", contenu: "Déjeuner", categorie: "sante", cellules: {} },
-    { libelle: "13h30-13h55", contenu: "Loisir", categorie: "autre", cellules: {} },
-    { libelle: "14h00-15h25", contenu: "Repos", categorie: "sante", cellules: {} },
-    { libelle: "15h30-15h55", contenu: "", categorie: "autre", cellules: { "5": "Prière", "6": "Prière" } },
-    { libelle: "16h00-16h35", contenu: "", categorie: "autre", cellules: { "5": "Lessive" } },
-    { libelle: "16h35-16h35", contenu: "Arrivée", categorie: "autre", cellules: { "5": "", "6": "" } },
-    { libelle: "16h40-16h50", contenu: "Prière", categorie: "spiritual", cellules: { "5": "" } },
-    { libelle: "17h00-18h30", contenu: "Sport", categorie: "sport", cellules: { "0": "Basket 🏀", "3": "Basket 🏀", "4": "Bibliothèque 📚", "5": "Basket 🏀" } },
-    { libelle: "18h35-19h00", contenu: "Sport & Bain", categorie: "sport", cellules: {} },
-    { libelle: "19h00-19h55", contenu: "Révision", categorie: "etude", cellules: {} },
-    { libelle: "20h00-20h20", contenu: "Dîner", categorie: "sante", cellules: {} },
-    { libelle: "20h25-20h50", contenu: "Travail", categorie: "travail", cellules: {} },
-    { libelle: "21h00-21h00", contenu: "Prière", categorie: "spiritual", cellules: {} },
-    { libelle: "21h20-21h50", contenu: "Lecture", categorie: "etude", cellules: {} },
-    { libelle: "21h55-22h30", contenu: "Loisir", categorie: "autre", cellules: {} },
-    { libelle: "22h30-22h30", contenu: "Dodo", categorie: "sante", cellules: {} },
-  ],
-};
 
 export default function ScannerOCR({ onProgrammeCreated, onClose }) {
   const [etape, setEtape] = useState('upload');
@@ -230,11 +169,9 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [progression, setProgression] = useState(0);
   const fileRef = useRef();
-  const lastFileRef = useRef();
 
   async function handleFile(file) {
     if (!file) return;
-    lastFileRef.current = file;
     setLoading(true);
     setEtape('analyse');
     setErrorMsg('');
@@ -259,25 +196,52 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
       const mots = extraire_mots(ret.data);
       const tableau = extraire_tableau(mots);
 
-      const creneaux = tableau
-        ? construire_creneaux_depuis_tableau(tableau)
-        : extraire_creneaux_simple(ret.data.text || '');
+      const creneaux = tableau ? construire_creneaux_depuis_tableau(tableau) : [
+        { libelle: "08h00-10h00", contenu: "Activité", categorie: "autre", cellules: {} }
+      ];
 
       setProgramme({
         nom: formattedName && formattedName !== "File" ? formattedName : "Programme importé",
-        creneaux: creneaux.length > 0 ? creneaux : [
-          { libelle: "08h00-10h00", contenu: "Activité (à compléter)", categorie: "autre" }
-        ]
+        creneaux: creneaux
       });
-      setEtape('resultat');
+      setEtape('edition'); // Passage direct à l'étape d'édition indépendante
     } catch (err) {
-      setErrorMsg(`Erreur : ${err?.message || String(err)}. Essayez une photo plus nette, bien droite et bien éclairée.`);
+      setErrorMsg(`Erreur : ${err?.message || String(err)}. Essayez une photo plus nette et bien éclairée.`);
       setEtape('erreur');
     } finally {
       setLoading(false);
       if (worker) await worker.terminate();
       if (fileRef.current) fileRef.current.value = '';
     }
+  }
+
+  function modifierCreneau(index, champ, valeur) {
+    setProgramme(prev => {
+      const nouveauxCreneaux = [...prev.creneaux];
+      nouveauxCreneaux[index] = { ...nouveauxCreneaux[index], [champ]: valeur };
+      if (champ === 'contenu') {
+        nouveauxCreneaux[index].categorie = deviner_categorie(valeur);
+      }
+      return { ...prev, creneaux: nouveauxCreneaux };
+    });
+  }
+
+  function modifierCelluleJour(indexCreneau, indexJour, valeur) {
+    setProgramme(prev => {
+      const nouveauxCreneaux = [...prev.creneaux];
+      const cr = { ...nouveauxCreneaux[indexCreneau] };
+      const cellules = { ...(cr.cellules || {}) };
+      
+      if (valeur.trim() === '') {
+        delete cellules[String(indexJour)];
+      } else {
+        cellules[String(indexJour)] = valeur;
+      }
+      
+      cr.cellules = cellules;
+      nouveauxCreneaux[indexCreneau] = cr;
+      return { ...prev, creneaux: nouveauxCreneaux };
+    });
   }
 
   async function validerProgramme() {
@@ -288,8 +252,6 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     try {
       const creneauxNettoyes = (programme.creneaux || []).map((cr, i) => {
         let libelle = cr.libelle || '08h00-10h00';
-        
-        // Correction des horaires à durée nulle (ex: 21h00-21h00)
         if (libelle.length === 11 && libelle.slice(0, 5) === libelle.slice(6)) {
           const [h, m] = libelle.slice(0, 5).split('h');
           let totalMinutes = parseInt(h) * 60 + parseInt(m) + 15;
@@ -298,13 +260,10 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
           libelle = `${libelle.slice(0, 5)}-${newH}h${newM}`;
         }
 
-        // Sécurité : si le contenu est vide, on attribue un texte par défaut
-        let contenuFinal = cr.contenu && cr.contenu.trim() !== '' ? cr.contenu : 'Activité';
-
         return {
           id: `cr_${Date.now()}_${i}`,
-          libelle: libelle,
-          contenu: contenuFinal,
+          libelle,
+          contenu: cr.contenu && cr.contenu.trim() !== '' ? cr.contenu : 'Activité',
           categorie: cr.categorie || 'autre',
           cellules: cr.cellules || {}
         };
@@ -312,18 +271,14 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
 
       const prog = await base44.entities.Programme.create({
         nom: programme.nom || 'Programme importé',
-        description: 'Importé depuis un document',
+        description: 'Importé et personnalisé depuis un document',
         couleur_theme: '#3498DB',
         jours: JOURS.map((j, i) => ({ id: String(i), nom: j, actif: true })),
         creneaux: creneauxNettoyes
       });
 
-      if (onProgrammeCreated && typeof onProgrammeCreated === 'function') {
-        onProgrammeCreated(prog);
-      }
-      if (onClose && typeof onClose === 'function') {
-        onClose();
-      }
+      if (onProgrammeCreated) onProgrammeCreated(prog);
+      if (onClose) onClose();
     } catch (err) {
       console.error("Erreur détaillée:", err);
       setErrorMsg(`Erreur : ${err?.message || JSON.stringify(err)}`);
@@ -334,20 +289,20 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
-      <div className="w-full max-w-md rounded-2xl border border-border p-6 animate-fade-in" style={{ background: '#0D0D18' }}>
-        <div className="flex items-center justify-between mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-border p-4 sm:p-6 animate-fade-in overflow-hidden" style={{ background: '#0D0D18' }}>
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
           <div className="flex items-center gap-2">
             <Camera size={18} style={{ color: 'var(--gold)' }} />
-            <h2 className="text-base font-black text-foreground">Importation de document</h2>
+            <h2 className="text-base font-black text-foreground">Importation & Édition sur-mesure</h2>
           </div>
           <button onClick={onClose}><X size={20} className="text-muted-foreground" /></button>
         </div>
 
         {etape === 'upload' && (
-          <div>
+          <div className="py-4">
             <p className="text-sm text-muted-foreground mb-5">
-              Importez votre document ou photo d'emploi du temps pour créer votre programme. Pour un tableau (jours en colonnes), prenez la photo bien droite et bien éclairée.
+              Importez l'emploi du temps. L'application va extraire le tableau pour vous permettre de modifier chaque case de chaque jour en toute indépendance.
             </p>
             <div
               onClick={() => fileRef.current?.click()}
@@ -355,27 +310,20 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
               style={{ background: 'var(--accent)' }}
             >
               <Upload size={32} className="text-muted-foreground mb-3" />
-              <p className="text-sm font-bold text-foreground">Cliquez pour importer un document</p>
-              <p className="text-xs text-muted-foreground mt-1">Photo, capture… (texte net de préférence)</p>
+              <p className="text-sm font-bold text-foreground">Cliquez pour importer l'image de l'emploi du temps</p>
+              <p className="text-xs text-muted-foreground mt-1">Photo claire et bien orientée recommandée</p>
             </div>
             <input ref={fileRef} type="file" accept="image/*" className="hidden"
               onChange={e => handleFile(e.target.files[0])} />
-
-            <button
-              onClick={() => { setProgramme(PROGRAMME_BOGOU_SAKRE); setEtape('resultat'); }}
-              className="w-full mt-4 py-3 rounded-xl text-sm font-black border border-border text-foreground"
-              style={{ background: 'var(--accent)' }}>
-              📋 Charger mon programme (déjà transcrit)
-            </button>
           </div>
         )}
 
         {etape === 'analyse' && (
-          <div className="flex flex-col items-center py-8 text-center">
+          <div className="flex flex-col items-center py-12 text-center">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--gold-dim)' }}>
               <Calendar size={28} style={{ color: 'var(--gold)' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Lecture en cours… {progression}%</p>
+            <p className="text-base font-black text-foreground mb-2">Analyse du tableau en cours… {progression}%</p>
             <div className="flex gap-1.5 mt-2">
               {[0, 1, 2].map(i => (
                 <div key={i} className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--gold)', animationDelay: `${i * 0.15}s` }} />
@@ -389,7 +337,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(231,76,60,0.15)' }}>
               <X size={28} style={{ color: '#E74C3C' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Oups, un problème est survenu</p>
+            <p className="text-base font-black text-foreground mb-2">Un problème est survenu</p>
             <p className="text-sm text-muted-foreground mb-6 break-all">{errorMsg}</p>
             <button onClick={() => setEtape('upload')}
               className="w-full py-3 rounded-xl font-black text-sm"
@@ -399,39 +347,67 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
           </div>
         )}
 
-        {etape === 'resultat' && programme && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
+        {etape === 'edition' && programme && (
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="flex items-center gap-2 mb-3">
               <CheckCircle2 size={16} style={{ color: '#2ECC71' }} />
-              <p className="text-sm font-bold text-foreground">Document prêt !</p>
+              <p className="text-sm font-bold text-foreground">Modifiez vos créneaux et jours en toute liberté :</p>
             </div>
 
-            <div className="mb-4">
-              <label className="text-xs font-bold tracking-widest text-muted-foreground block mb-1.5">NOM DU PROGRAMME</label>
+            <div className="mb-3">
+              <label className="text-xs font-bold tracking-widest text-muted-foreground block mb-1">NOM DU PROGRAMME</label>
               <input
                 value={programme.nom || ''}
                 onChange={e => setProgramme(p => ({ ...p, nom: e.target.value }))}
-                className="w-full bg-accent border border-border rounded-xl px-4 py-2.5 text-sm text-foreground outline-none focus:border-gold"
+                className="w-full bg-accent border border-border rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-gold"
               />
             </div>
 
-            <div className="rounded-xl border border-border overflow-hidden mb-5 max-h-48 overflow-y-auto" style={{ background: 'var(--surface)' }}>
-              {(programme.creneaux || []).map((cr, i) => (
-                <div key={i} className={`flex items-center gap-3 p-3 ${i > 0 ? 'border-t border-border' : ''}`}>
-                  <span className="text-xs font-mono text-muted-foreground w-24 shrink-0">{cr.libelle}</span>
-                  <span className="text-sm text-foreground">{cr.contenu || '(Vide)'}</span>
+            <div className="flex-1 overflow-y-auto border border-border rounded-xl p-2 space-y-3" style={{ background: 'var(--surface)' }}>
+              {(programme.creneaux || []).map((cr, idx) => (
+                <div key={idx} className="p-3 rounded-xl border border-border" style={{ background: 'var(--accent)' }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Edit3 size={14} className="text-muted-foreground" />
+                    <input
+                      value={cr.libelle}
+                      onChange={e => modifierCreneau(idx, 'libelle', e.target.value)}
+                      placeholder="Ex: 08h00-10h00"
+                      className="bg-surface border border-border rounded-lg px-2 py-1 text-xs font-mono text-foreground w-32 outline-none focus:border-gold"
+                    />
+                    <input
+                      value={cr.contenu}
+                      onChange={e => modifierCreneau(idx, 'contenu', e.target.value)}
+                      placeholder="Activité principale"
+                      className="flex-1 bg-surface border border-border rounded-lg px-2 py-1 text-xs text-foreground outline-none focus:border-gold"
+                    />
+                  </div>
+
+                  {/* Personnalisation par jour indépendante */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2 pt-2 border-t border-border/50">
+                    {JOURS.map((nomJour, jIdx) => (
+                      <div key={jIdx} className="flex flex-col">
+                        <span className="text-[10px] text-muted-foreground font-semibold">{nomJour}</span>
+                        <input
+                          value={cr.cellules?.[String(jIdx)] || ''}
+                          onChange={e => modifierCelluleJour(idx, jIdx, e.target.value)}
+                          placeholder="Idem"
+                          className="bg-surface border border-border rounded px-1.5 py-1 text-[11px] text-foreground outline-none focus:border-gold"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 mt-4 pt-2 border-t border-border">
               <button onClick={() => setEtape('upload')} className="flex-1 py-2.5 rounded-xl text-sm font-bold border border-border text-muted-foreground">
                 Recommencer
               </button>
               <button onClick={validerProgramme} disabled={loading}
                 className="flex-1 py-2.5 rounded-xl text-sm font-black disabled:opacity-50"
                 style={{ background: 'var(--gold)', color: '#080810' }}>
-                {loading ? <Loader2 size={16} className="animate-spin mx-auto" /> : '✅ Créer le programme'}
+                {loading ? <Loader2 size={16} className="animate-spin mx-auto" /> : '✅ Enregistrer le programme'}
               </button>
             </div>
           </div>
