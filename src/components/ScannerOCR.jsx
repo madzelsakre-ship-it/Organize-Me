@@ -176,7 +176,6 @@ function construire_creneaux_depuis_tableau(tableau) {
     valeurs.forEach(v => { frequences[v] = (frequences[v] || 0) + 1; });
     const contenuPrincipal = Object.entries(frequences).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Activité';
 
-    // Les jours où l'activité diffère du contenu principal sont notés à part
     const cellules = {};
     NOMS_JOURS.forEach((jour, idx) => {
       if (parJour[jour] && parJour[jour] !== contenuPrincipal) {
@@ -193,7 +192,6 @@ function construire_creneaux_depuis_tableau(tableau) {
   });
 }
 
-// Programme transcrit à la main depuis la photo du tableau (fiable à 100%, pas d'OCR)
 const PROGRAMME_BOGOU_SAKRE = {
   nom: "Programme Hebdomadaire — Bogou Sakré",
   creneaux: [
@@ -288,18 +286,33 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setErrorMsg('');
 
     try {
+      // Sécurisation et nettoyage automatique des créneaux à durée nulle (ex: 21h00-21h00)
+      const creneauxNettoyes = (programme.creneaux || []).map((cr, i) => {
+        let libelle = cr.libelle || '08h00-10h00';
+        
+        if (libelle.length === 11 && libelle.slice(0, 5) === libelle.slice(6)) {
+          const [h, m] = libelle.slice(0, 5).split('h');
+          let totalMinutes = parseInt(h) * 60 + parseInt(m) + 15;
+          const newH = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+          const newM = String(totalMinutes % 60).padStart(2, '0');
+          libelle = `${libelle.slice(0, 5)}-${newH}h${newM}`;
+        }
+
+        return {
+          id: `cr_${Date.now()}_${i}`,
+          libelle: libelle,
+          contenu: cr.contenu || 'Activité',
+          categorie: cr.categorie || 'autre',
+          cellules: cr.cellules || {}
+        };
+      });
+
       const prog = await base44.entities.Programme.create({
         nom: programme.nom || 'Programme importé',
         description: 'Importé depuis un document',
         couleur_theme: '#3498DB',
         jours: JOURS.map((j, i) => ({ id: String(i), nom: j, actif: true })),
-        creneaux: (programme.creneaux || []).map((cr, i) => ({
-          id: `cr_${Date.now()}_${i}`,
-          libelle: cr.libelle || '08h00-10h00',
-          contenu: cr.contenu || 'Activité',
-          categorie: cr.categorie || 'autre',
-          cellules: cr.cellules || {}
-        }))
+        creneaux: creneauxNettoyes
       });
 
       if (onProgrammeCreated && typeof onProgrammeCreated === 'function') {
