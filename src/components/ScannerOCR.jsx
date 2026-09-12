@@ -286,7 +286,6 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     setErrorMsg('');
 
     try {
-      // Sécurisation et nettoyage automatique des créneaux à durée nulle (ex: 21h00-21h00)
       const creneauxNettoyes = (programme.creneaux || []).map((cr, i) => {
         let libelle = cr.libelle || '08h00-10h00';
         
@@ -322,8 +321,9 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         onClose();
       }
     } catch (err) {
-      console.error("Erreur:", err);
-      setErrorMsg("Impossible de valider le programme.");
+      console.error("Erreur détaillée:", err);
+      // Affichage du message d'erreur réel de l'API/Supabase pour diagnostic direct
+      setErrorMsg(`Erreur : ${err?.message || JSON.stringify(err)}`);
       setEtape('erreur');
     } finally {
       setLoading(false);
@@ -387,7 +387,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
               <X size={28} style={{ color: '#E74C3C' }} />
             </div>
             <p className="text-base font-black text-foreground mb-2">Oups, un problème est survenu</p>
-            <p className="text-sm text-muted-foreground mb-6">{errorMsg}</p>
+            <p className="text-sm text-muted-foreground mb-6 break-all">{errorMsg}</p>
             <button onClick={() => setEtape('upload')}
               className="w-full py-3 rounded-xl font-black text-sm"
               style={{ background: 'var(--gold)', color: '#080810' }}>
