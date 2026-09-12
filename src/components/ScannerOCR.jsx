@@ -289,6 +289,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
       const creneauxNettoyes = (programme.creneaux || []).map((cr, i) => {
         let libelle = cr.libelle || '08h00-10h00';
         
+        // Correction des horaires à durée nulle (ex: 21h00-21h00)
         if (libelle.length === 11 && libelle.slice(0, 5) === libelle.slice(6)) {
           const [h, m] = libelle.slice(0, 5).split('h');
           let totalMinutes = parseInt(h) * 60 + parseInt(m) + 15;
@@ -297,10 +298,13 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
           libelle = `${libelle.slice(0, 5)}-${newH}h${newM}`;
         }
 
+        // Sécurité : si le contenu est vide, on attribue un texte par défaut
+        let contenuFinal = cr.contenu && cr.contenu.trim() !== '' ? cr.contenu : 'Activité';
+
         return {
           id: `cr_${Date.now()}_${i}`,
           libelle: libelle,
-          contenu: cr.contenu || 'Activité',
+          contenu: contenuFinal,
           categorie: cr.categorie || 'autre',
           cellules: cr.cellules || {}
         };
@@ -322,7 +326,6 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
       }
     } catch (err) {
       console.error("Erreur détaillée:", err);
-      // Affichage du message d'erreur réel de l'API/Supabase pour diagnostic direct
       setErrorMsg(`Erreur : ${err?.message || JSON.stringify(err)}`);
       setEtape('erreur');
     } finally {
@@ -416,7 +419,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
               {(programme.creneaux || []).map((cr, i) => (
                 <div key={i} className={`flex items-center gap-3 p-3 ${i > 0 ? 'border-t border-border' : ''}`}>
                   <span className="text-xs font-mono text-muted-foreground w-24 shrink-0">{cr.libelle}</span>
-                  <span className="text-sm text-foreground">{cr.contenu}</span>
+                  <span className="text-sm text-foreground">{cr.contenu || '(Vide)'}</span>
                 </div>
               ))}
             </div>
