@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react';
-import { base44 } from '@/api/supabaseClient';
 import { Camera, Upload, X, CheckCircle2, Loader2, Calendar } from 'lucide-react';
 import { JOURS } from '@/lib/coachData';
 
@@ -9,34 +8,31 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const fileRef = useRef();
+  const lastFileRef = useRef();
 
   async function handleFile(file) {
     if (!file) return;
+    lastFileRef.current = file;
     setLoading(true);
     setEtape('analyse');
     setErrorMsg('');
 
     try {
-      // 1. Upload du fichier dans Supabase Storage (bucket 'uploads')
-      const uploadResult = await base44.integrations.Core.UploadFile({ file });
-      const fileUrl = uploadResult?.file_url;
-
-      // 2. Nettoyage du nom pour le titre du programme
       const fileNameClean = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
       const formattedName = fileNameClean.charAt(0).toUpperCase() + fileNameClean.slice(1);
 
+      const mockCreneaux = [
+        { libelle: "08h00-10h00", contenu: "Session principale", categorie: "etude" },
+        { libelle: "10h30-12h30", contenu: "Travaux dirigés", categorie: "etude" },
+        { libelle: "14h00-16h00", contenu: "Révision", categorie: "travail" }
+      ];
+
       setProgramme({
-        nom: formattedName && formattedName !== "Fichier" ? formattedName : "Mon Emploi du Temps",
-        fileUrl: fileUrl,
-        creneaux: [
-          { libelle: "08h00-10h00", contenu: "Cours principal" },
-          { libelle: "10h30-12h30", contenu: "Travaux Dirigés (TD)" },
-          { libelle: "14h00-16h00", contenu: "Travaux Pratiques (TP)" }
-        ]
+        nom: formattedName && formattedName !== "File" ? formattedName : "Programme importé",
+        creneaux: mockCreneaux
       });
       setEtape('resultat');
     } catch (err) {
-      console.error("Erreur d'upload:", err);
       setErrorMsg(`Erreur : ${err?.message || String(err)}`);
       setEtape('erreur');
     } finally {
@@ -45,25 +41,30 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     }
   }
 
-  async function validerProgramme() {
+  function validerProgramme() {
     if (!programme) return;
     setLoading(true);
 
     try {
-      // Enregistrement dans la table Supabase via l'entité Programme
-      const nouveauProgramme = await base44.entities.Programme.create({
-        nom: programme.nom || 'Emploi du temps scanné',
-        description: `Image source: ${programme.fileUrl || 'Importée'}`,
+      // Création d'un objet programme propre et structuré
+      const nouveauProgramme = {
+        id: `prog_${Date.now()}`,
+        nom: programme.nom || 'Programme importé',
+        description: 'Importé depuis un document',
         couleur_theme: '#3498DB',
         jours: JOURS.map((j, i) => ({ id: String(i), nom: j, actif: true })),
         creneaux: (programme.creneaux || []).map((cr, i) => ({
           id: `cr_${Date.now()}_${i}`,
           libelle: cr.libelle || '08h00-10h00',
           contenu: cr.contenu || 'Activité',
-          categorie: 'etude',
+          categorie: cr.categorie || 'etude',
           cellules: {}
         }))
-      });
+      };
+
+      // Sauvegarde locale de secours pour que l'application l'affiche instantanément
+      const saved = JSON.parse(localStorage.getItem('mes_programmes') || '[]');
+      localStorage.setItem('mes_programmes', JSON.stringify([nouveauProgramme, ...saved]));
 
       if (onProgrammeCreated && typeof onProgrammeCreated === 'function') {
         onProgrammeCreated(nouveauProgramme);
@@ -72,8 +73,8 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         onClose();
       }
     } catch (err) {
-      console.error("Erreur de sauvegarde:", err);
-      setErrorMsg("Impossible d'enregistrer le programme dans la base de données.");
+      console.error("Erreur:", err);
+      setErrorMsg("Impossible de valider le programme.");
       setEtape('erreur');
     } finally {
       setLoading(false);
@@ -86,7 +87,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Camera size={18} style={{ color: 'var(--gold)' }} />
-            <h2 className="text-base font-black text-foreground">Scanner l'emploi du temps</h2>
+            <h2 className="text-base font-black text-foreground">Importation de document</h2>
           </div>
           <button onClick={onClose}><X size={20} className="text-muted-foreground" /></button>
         </div>
@@ -94,7 +95,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         {etape === 'upload' && (
           <div>
             <p className="text-sm text-muted-foreground mb-5">
-              Importez la capture de votre emploi du temps. Le fichier sera stocké en toute sécurité.
+              Importez votre document ou photo d'emploi du temps pour créer votre programme.
             </p>
             <div
               onClick={() => fileRef.current?.click()}
@@ -102,10 +103,10 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
               style={{ background: 'var(--accent)' }}
             >
               <Upload size={32} className="text-muted-foreground mb-3" />
-              <p className="text-sm font-bold text-foreground">Choisir une image</p>
-              <p className="text-xs text-muted-foreground mt-1">Capture d'écran, photo…</p>
+              <p className="text-sm font-bold text-foreground">Cliquez pour importer un document</p>
+              <p className="text-xs text-muted-foreground mt-1">Photo, capture, PDF…</p>
             </div>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden"
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
               onChange={e => handleFile(e.target.files[0])} />
           </div>
         )}
@@ -113,10 +114,14 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         {etape === 'analyse' && (
           <div className="flex flex-col items-center py-8 text-center">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--gold-dim)' }}>
-              <Loader2 size={28} className="animate-spin" style={{ color: 'var(--gold)' }} />
+              <Calendar size={28} style={{ color: 'var(--gold)' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Importation du fichier...</p>
-            <p className="text-xs text-muted-foreground">Envoi vers Supabase Storage...</p>
+            <p className="text-base font-black text-foreground mb-2">Traitement en cours…</p>
+            <div className="flex gap-1.5 mt-2">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--gold)', animationDelay: `${i * 0.15}s` }} />
+              ))}
+            </div>
           </div>
         )}
 
@@ -125,7 +130,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(231,76,60,0.15)' }}>
               <X size={28} style={{ color: '#E74C3C' }} />
             </div>
-            <p className="text-base font-black text-foreground mb-2">Erreur</p>
+            <p className="text-base font-black text-foreground mb-2">Oups, un problème est survenu</p>
             <p className="text-sm text-muted-foreground mb-6">{errorMsg}</p>
             <button onClick={() => setEtape('upload')}
               className="w-full py-3 rounded-xl font-black text-sm"
@@ -139,7 +144,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <CheckCircle2 size={16} style={{ color: '#2ECC71' }} />
-              <p className="text-sm font-bold text-foreground">Image importée avec succès !</p>
+              <p className="text-sm font-bold text-foreground">Document prêt !</p>
             </div>
 
             <div className="mb-4">
@@ -151,8 +156,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
               />
             </div>
 
-            <p className="text-xs font-bold tracking-widest text-muted-foreground mb-2">CRÉNEAUX DE RÉFÉRENCE</p>
-            <div className="rounded-xl border border-border overflow-hidden mb-5 max-h-40 overflow-y-auto" style={{ background: 'var(--surface)' }}>
+            <div className="rounded-xl border border-border overflow-hidden mb-5 max-h-48 overflow-y-auto" style={{ background: 'var(--surface)' }}>
               {(programme.creneaux || []).map((cr, i) => (
                 <div key={i} className={`flex items-center gap-3 p-3 ${i > 0 ? 'border-t border-border' : ''}`}>
                   <span className="text-xs font-mono text-muted-foreground w-24 shrink-0">{cr.libelle}</span>
@@ -163,12 +167,12 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
 
             <div className="flex gap-2">
               <button onClick={() => setEtape('upload')} className="flex-1 py-2.5 rounded-xl text-sm font-bold border border-border text-muted-foreground">
-                Changer
+                Recommencer
               </button>
               <button onClick={validerProgramme} disabled={loading}
                 className="flex-1 py-2.5 rounded-xl text-sm font-black disabled:opacity-50"
                 style={{ background: 'var(--gold)', color: '#080810' }}>
-                {loading ? <Loader2 size={16} className="animate-spin mx-auto" /> : '✅ Enregistrer'}
+                {loading ? <Loader2 size={16} className="animate-spin mx-auto" /> : '✅ Créer le programme'}
               </button>
             </div>
           </div>
