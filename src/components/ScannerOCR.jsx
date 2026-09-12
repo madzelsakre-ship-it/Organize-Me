@@ -21,6 +21,15 @@ function deviner_categorie(texte) {
   return 'etude';
 }
 
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Impossible de lire le fichier sélectionné."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function extraire_creneaux(texteBrut) {
   const lignes = texteBrut.split('\n').map(l => l.trim()).filter(Boolean);
   const regexHoraire = /(\d{1,2})\s*[h:]\s*(\d{0,2})\s*[-–à]{1,3}\s*(\d{1,2})\s*[h:]\s*(\d{0,2})/i;
@@ -75,7 +84,8 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         },
       });
 
-      const { data: { text } } = await worker.recognize(file);
+      const dataUrl = await fileToDataURL(file);
+      const { data: { text } } = await worker.recognize(dataUrl);
       const creneaux = extraire_creneaux(text);
 
       setProgramme({
