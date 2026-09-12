@@ -236,7 +236,7 @@ export default function Programmes() {
                             <td key={j.id} className="p-2 text-center">
                               {contenu ? (
                                 <div className="rounded-lg px-2 py-1.5 text-xs font-semibold" style={{ background: `${cat.color}20`, color: cat.color }}>
-                                  <div>{cat.emoji}</div>
+                                  <div>{cat.icon}</div>
                                   <div className="mt-0.5 text-[10px] leading-tight">{contenu}</div>
                                 </div>
                               ) : (
@@ -297,7 +297,7 @@ export default function Programmes() {
                     className="w-full bg-accent border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none"
                   >
                     {Object.entries(CATEGORIES).map(([k, v]) => (
-                      <option key={k} value={k}>{v.emoji} {v.label}</option>
+                      <option key={k} value={k}>{v.icon} {v.label}</option>
                     ))}
                   </select>
                 </div>
@@ -341,7 +341,7 @@ export default function Programmes() {
                     className="w-full bg-accent border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none"
                   >
                     {Object.entries(CATEGORIES).map(([k, v]) => (
-                      <option key={k} value={k}>{v.emoji} {v.label}</option>
+                      <option key={k} value={k}>{v.icon} {v.label}</option>
                     ))}
                   </select>
                 </div>
@@ -467,7 +467,7 @@ export default function Programmes() {
                     <button key={k} onClick={() => toggleCategorie(k)}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
                       style={sel ? { background: `${v.color}30`, color: v.color, border: `1px solid ${v.color}` } : { background: 'var(--surface)', color: '#666677', border: '1px solid var(--border)' }}
-                    >{v.emoji} {v.label}</button>
+                    >{v.icon} {v.label}</button>
                   );
                 })}
               </div>
