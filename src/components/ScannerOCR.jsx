@@ -4,21 +4,26 @@ import { Camera, Upload, X, CheckCircle2, Loader2, Calendar } from 'lucide-react
 import { JOURS } from '@/lib/coachData';
 
 const CATEGORIE_KEYWORDS = {
-  etude: ['cours', 'école', 'ecole', 'classe', 'devoir', 'étude', 'etude', 'lecture', 'révision', 'revision'],
-  sport: ['sport', 'gym', 'foot', 'course', 'musculation', 'entraînement', 'entrainement', 'natation'],
+  spiritual: ['prière', 'priere', 'salat', 'messe', 'culte', 'méditation', 'meditation'],
+  sport: ['sport', 'gym', 'foot', 'basket', 'course', 'musculation', 'entraînement', 'entrainement', 'natation', 'bain'],
+  sante: ['repas', 'déjeuner', 'dejeuner', 'diner', 'dîner', 'petit-déjeuner', 'petit dejeuner', 'manger', 'dodo', 'sommeil', 'dormir', 'nuit', 'sieste', 'coucher', 'réveil', 'reveil', 'repos'],
+  etude: ['cours', 'école', 'ecole', 'classe', 'devoir', 'étude', 'etude', 'lecture', 'révision', 'revision', 'bibliothèque', 'bibliotheque'],
   travail: ['travail', 'boulot', 'réunion', 'reunion', 'bureau', 'job'],
-  repas: ['repas', 'déjeuner', 'dejeuner', 'diner', 'dîner', 'petit-déjeuner', 'petit dejeuner', 'manger'],
-  sommeil: ['dodo', 'sommeil', 'dormir', 'nuit', 'sieste', 'coucher'],
-  priere: ['prière', 'priere', 'salat', 'messe', 'culte'],
-  loisir: ['loisir', 'jeu', 'film', 'sortie', 'détente', 'detente', 'repos'],
+  social: ['ami', 'amis', 'famille', 'visite', 'anniversaire'],
 };
 
+const NOMS_JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+
+function normaliser(txt) {
+  return txt.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+
 function deviner_categorie(texte) {
-  const t = texte.toLowerCase();
+  const t = normaliser(texte);
   for (const [cat, mots] of Object.entries(CATEGORIE_KEYWORDS)) {
     if (mots.some(m => t.includes(m))) return cat;
   }
-  return 'etude';
+  return 'autre';
 }
 
 function fileToDataURL(file) {
@@ -30,7 +35,8 @@ function fileToDataURL(file) {
   });
 }
 
-function extraire_creneaux(texteBrut) {
+// --- Parseur simple (liste, une ligne = un horaire + une activité) ---
+function extraire_creneaux_simple(texteBrut) {
   const lignes = texteBrut.split('\n').map(l => l.trim()).filter(Boolean);
   const regexHoraire = /(\d{1,2})\s*[h:]\s*(\d{0,2})\s*[-–à]{1,3}\s*(\d{1,2})\s*[h:]\s*(\d{0,2})/i;
   const creneaux = [];
@@ -52,6 +58,138 @@ function extraire_creneaux(texteBrut) {
   });
 
   return creneaux.slice(0, 20);
+}
+
+// --- Parseur de tableau (grille avec colonnes = jours) basé sur les positions des mots ---
+function extraire_mots(dataTesseract) {
+  const mots = [];
+  const blocks = dataTesseract?.blocks || [];
+  blocks.forEach(block => {
+    (block.paragraphs || []).forEach(para => {
+      (para.lines || []).forEach(line => {
+        (line.words || []).forEach(word => {
+          if (word?.bbox && word.text?.trim()) {
+            mots.push({
+              text: word.text.trim(),
+              x0: word.bbox.x0, x1: word.bbox.x1,
+              y0: word.bbox.y0, y1: word.bbox.y1,
+            });
+          }
+        });
+      });
+    });
+  });
+  return mots;
+}
+
+function grouper_en_lignes(mots) {
+  const tries = [...mots].sort((a, b) => (a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2);
+  if (tries.length === 0) return [];
+  const hauteurMoyenne = tries.reduce((s, m) => s + (m.y1 - m.y0), 0) / tries.length;
+  const seuil = Math.max(hauteurMoyenne * 0.6, 8);
+  const lignes = [];
+
+  tries.forEach(mot => {
+    const centreY = (mot.y0 + mot.y1) / 2;
+    let ligne = lignes.find(l => Math.abs(l.centreY - centreY) < seuil);
+    if (!ligne) {
+      ligne = { centreY, mots: [] };
+      lignes.push(ligne);
+    }
+    ligne.mots.push(mot);
+    ligne.centreY = ligne.mots.reduce((s, m) => s + (m.y0 + m.y1) / 2, 0) / ligne.mots.length;
+  });
+
+  lignes.forEach(l => l.mots.sort((a, b) => a.x0 - b.x0));
+  lignes.sort((a, b) => a.centreY - b.centreY);
+  return lignes;
+}
+
+function extraire_tableau(mots) {
+  const lignes = grouper_en_lignes(mots);
+
+  let headerIndex = -1;
+  let colonnesJours = null;
+
+  for (let i = 0; i < lignes.length; i++) {
+    const motsJours = lignes[i].mots.filter(m => NOMS_JOURS.includes(normaliser(m.text)));
+    if (motsJours.length >= 4) {
+      headerIndex = i;
+      colonnesJours = motsJours
+        .map(m => ({ jour: normaliser(m.text), centre: (m.x0 + m.x1) / 2 }))
+        .sort((a, b) => a.centre - b.centre);
+      break;
+    }
+  }
+
+  if (headerIndex === -1 || !colonnesJours || colonnesJours.length < 4) {
+    return null; // Pas de tableau détecté
+  }
+
+  const bornes = colonnesJours.map((col, i) => ({
+    jour: col.jour,
+    gauche: i === 0 ? -Infinity : (colonnesJours[i - 1].centre + col.centre) / 2,
+    droite: i === colonnesJours.length - 1 ? Infinity : (col.centre + colonnesJours[i + 1].centre) / 2,
+  }));
+
+  const regexHoraireBrut = /\d{1,2}\s*[h:]\s*\d{0,2}/;
+  const resultats = [];
+
+  for (let i = headerIndex + 1; i < lignes.length; i++) {
+    const ligne = lignes[i];
+    if (!ligne.mots.length) continue;
+
+    const motsHoraire = ligne.mots.filter(m => (m.x0 + m.x1) / 2 < bornes[0].droite - 15);
+    const texteHoraire = motsHoraire.map(m => m.text).join('');
+    if (!regexHoraireBrut.test(texteHoraire)) continue;
+
+    const parJour = {};
+    bornes.forEach(b => {
+      const motsColonne = ligne.mots.filter(m => {
+        const centre = (m.x0 + m.x1) / 2;
+        return centre >= b.gauche && centre < b.droite && !motsHoraire.includes(m);
+      });
+      const texte = motsColonne.map(m => m.text).join(' ').trim();
+      if (texte) parJour[b.jour] = texte;
+    });
+
+    if (Object.keys(parJour).length > 0) {
+      resultats.push({ horaire: texteHoraire.trim(), parJour });
+    }
+  }
+
+  return resultats.length > 0 ? resultats : null;
+}
+
+function normaliser_horaire(texteHoraire) {
+  const match = texteHoraire.match(/(\d{1,2})\s*[h:]?\s*(\d{0,2})\D+(\d{1,2})\s*[h:]?\s*(\d{0,2})/);
+  if (!match) return texteHoraire;
+  const [, h1, m1, h2, m2] = match;
+  return `${h1.padStart(2, '0')}h${(m1 || '00').padStart(2, '0')}-${h2.padStart(2, '0')}h${(m2 || '00').padStart(2, '0')}`;
+}
+
+function construire_creneaux_depuis_tableau(tableau) {
+  return tableau.map(({ horaire, parJour }) => {
+    const valeurs = Object.values(parJour);
+    const frequences = {};
+    valeurs.forEach(v => { frequences[v] = (frequences[v] || 0) + 1; });
+    const contenuPrincipal = Object.entries(frequences).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Activité';
+
+    // Les jours où l'activité diffère du contenu principal sont notés à part
+    const cellules = {};
+    NOMS_JOURS.forEach((jour, idx) => {
+      if (parJour[jour] && parJour[jour] !== contenuPrincipal) {
+        cellules[String(idx)] = parJour[jour];
+      }
+    });
+
+    return {
+      libelle: normaliser_horaire(horaire),
+      contenu: contenuPrincipal,
+      categorie: deviner_categorie(contenuPrincipal),
+      cellules,
+    };
+  });
 }
 
 export default function ScannerOCR({ onProgrammeCreated, onClose }) {
@@ -85,18 +223,24 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
       });
 
       const dataUrl = await fileToDataURL(file);
-      const { data: { text } } = await worker.recognize(dataUrl);
-      const creneaux = extraire_creneaux(text);
+      const ret = await worker.recognize(dataUrl, {}, { blocks: true, text: true });
+
+      const mots = extraire_mots(ret.data);
+      const tableau = extraire_tableau(mots);
+
+      const creneaux = tableau
+        ? construire_creneaux_depuis_tableau(tableau)
+        : extraire_creneaux_simple(ret.data.text || '');
 
       setProgramme({
         nom: formattedName && formattedName !== "File" ? formattedName : "Programme importé",
         creneaux: creneaux.length > 0 ? creneaux : [
-          { libelle: "08h00-10h00", contenu: "Activité (à compléter)", categorie: "etude" }
+          { libelle: "08h00-10h00", contenu: "Activité (à compléter)", categorie: "autre" }
         ]
       });
       setEtape('resultat');
     } catch (err) {
-      setErrorMsg(`Erreur : ${err?.message || String(err)}. Essayez une photo plus nette.`);
+      setErrorMsg(`Erreur : ${err?.message || String(err)}. Essayez une photo plus nette, bien droite et bien éclairée.`);
       setEtape('erreur');
     } finally {
       setLoading(false);
@@ -120,8 +264,8 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
           id: `cr_${Date.now()}_${i}`,
           libelle: cr.libelle || '08h00-10h00',
           contenu: cr.contenu || 'Activité',
-          categorie: cr.categorie || 'etude',
-          cellules: {}
+          categorie: cr.categorie || 'autre',
+          cellules: cr.cellules || {}
         }))
       };
 
@@ -157,7 +301,7 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
         {etape === 'upload' && (
           <div>
             <p className="text-sm text-muted-foreground mb-5">
-              Importez votre document ou photo d'emploi du temps pour créer votre programme.
+              Importez votre document ou photo d'emploi du temps pour créer votre programme. Pour un tableau (jours en colonnes), prenez la photo bien droite et bien éclairée.
             </p>
             <div
               onClick={() => fileRef.current?.click()}
