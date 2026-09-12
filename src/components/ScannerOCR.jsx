@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { createWorker } from 'tesseract.js';
+import { base44 } from '@/api/supabaseClient';
 import { Camera, Upload, X, CheckCircle2, Loader2, Calendar } from 'lucide-react';
 import { JOURS } from '@/lib/coachData';
 
@@ -192,6 +193,38 @@ function construire_creneaux_depuis_tableau(tableau) {
   });
 }
 
+// Programme transcrit à la main depuis la photo du tableau (fiable à 100%, pas d'OCR)
+const PROGRAMME_BOGOU_SAKRE = {
+  nom: "Programme Hebdomadaire — Bogou Sakré",
+  creneaux: [
+    { libelle: "03h25-03h45", contenu: "Prière", categorie: "spiritual", cellules: { "6": "Prière" } },
+    { libelle: "06h30-06h30", contenu: "Réveil", categorie: "sante", cellules: {} },
+    { libelle: "06h30-06h40", contenu: "Méditation & Sport", categorie: "spiritual", cellules: {} },
+    { libelle: "06h40-06h55", contenu: "Préparation", categorie: "autre", cellules: {} },
+    { libelle: "07h00-07h15", contenu: "Petit déjeuner", categorie: "sante", cellules: {} },
+    { libelle: "07h20-07h30", contenu: "Prière", categorie: "spiritual", cellules: {} },
+    { libelle: "07h30-07h50", contenu: "Lecture", categorie: "etude", cellules: {} },
+    { libelle: "08h00-08h00", contenu: "Départ", categorie: "autre", cellules: { "6": "" } },
+    { libelle: "12h25-12h40", contenu: "Lecture", categorie: "etude", cellules: { "5": "Arrivée", "6": "" } },
+    { libelle: "13h00-13h20", contenu: "Déjeuner", categorie: "sante", cellules: {} },
+    { libelle: "13h30-13h55", contenu: "Loisir", categorie: "autre", cellules: {} },
+    { libelle: "14h00-15h25", contenu: "Repos", categorie: "sante", cellules: {} },
+    { libelle: "15h30-15h55", contenu: "", categorie: "autre", cellules: { "5": "Prière", "6": "Prière" } },
+    { libelle: "16h00-16h35", contenu: "", categorie: "autre", cellules: { "5": "Lessive" } },
+    { libelle: "16h35-16h35", contenu: "Arrivée", categorie: "autre", cellules: { "5": "", "6": "" } },
+    { libelle: "16h40-16h50", contenu: "Prière", categorie: "spiritual", cellules: { "5": "" } },
+    { libelle: "17h00-18h30", contenu: "Sport", categorie: "sport", cellules: { "0": "Basket 🏀", "3": "Basket 🏀", "4": "Bibliothèque 📚", "5": "Basket 🏀" } },
+    { libelle: "18h35-19h00", contenu: "Sport & Bain", categorie: "sport", cellules: {} },
+    { libelle: "19h00-19h55", contenu: "Révision", categorie: "etude", cellules: {} },
+    { libelle: "20h00-20h20", contenu: "Dîner", categorie: "sante", cellules: {} },
+    { libelle: "20h25-20h50", contenu: "Travail", categorie: "travail", cellules: {} },
+    { libelle: "21h00-21h00", contenu: "Prière", categorie: "spiritual", cellules: {} },
+    { libelle: "21h20-21h50", contenu: "Lecture", categorie: "etude", cellules: {} },
+    { libelle: "21h55-22h30", contenu: "Loisir", categorie: "autre", cellules: {} },
+    { libelle: "22h30-22h30", contenu: "Dodo", categorie: "sante", cellules: {} },
+  ],
+};
+
 export default function ScannerOCR({ onProgrammeCreated, onClose }) {
   const [etape, setEtape] = useState('upload');
   const [programme, setProgramme] = useState(null);
@@ -249,13 +282,13 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
     }
   }
 
-  function validerProgramme() {
+  async function validerProgramme() {
     if (!programme) return;
     setLoading(true);
+    setErrorMsg('');
 
     try {
-      const nouveauProgramme = {
-        id: `prog_${Date.now()}`,
+      const prog = await base44.entities.Programme.create({
         nom: programme.nom || 'Programme importé',
         description: 'Importé depuis un document',
         couleur_theme: '#3498DB',
@@ -267,13 +300,10 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
           categorie: cr.categorie || 'autre',
           cellules: cr.cellules || {}
         }))
-      };
-
-      const saved = JSON.parse(localStorage.getItem('mes_programmes') || '[]');
-      localStorage.setItem('mes_programmes', JSON.stringify([nouveauProgramme, ...saved]));
+      });
 
       if (onProgrammeCreated && typeof onProgrammeCreated === 'function') {
-        onProgrammeCreated(nouveauProgramme);
+        onProgrammeCreated(prog);
       }
       if (onClose && typeof onClose === 'function') {
         onClose();
@@ -314,6 +344,13 @@ export default function ScannerOCR({ onProgrammeCreated, onClose }) {
             </div>
             <input ref={fileRef} type="file" accept="image/*" className="hidden"
               onChange={e => handleFile(e.target.files[0])} />
+
+            <button
+              onClick={() => { setProgramme(PROGRAMME_BOGOU_SAKRE); setEtape('resultat'); }}
+              className="w-full mt-4 py-3 rounded-xl text-sm font-black border border-border text-foreground"
+              style={{ background: 'var(--accent)' }}>
+              📋 Charger mon programme (déjà transcrit)
+            </button>
           </div>
         )}
 
