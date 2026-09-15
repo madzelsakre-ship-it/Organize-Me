@@ -19,11 +19,13 @@ export default function Programmes() {
   const [showAddCreneau, setShowAddCreneau] = useState(false);
   const [formCreneau, setFormCreneau] = useState({ libelle: '', contenu: '', categorie: 'travail' });
   const [editCreneau, setEditCreneau] = useState(null);
+  const [editCellule, setEditCellule] = useState(null);
+  const [formCellule, setFormCellule] = useState({ contenu: '', categorie: 'autre' });
   // Formulaire génération
   const [formGen, setFormGen] = useState({
     nom: '', reveil: '6h30', coucher: '22h30',
     categories: ['travail', 'etude'],
-    joursTravail: [0,1,2,3,4],
+    joursTravail: [0, 1, 2, 3, 4],
     pauseRepas: true
   });
   // Template
@@ -117,6 +119,69 @@ export default function Programmes() {
     setProgrammes(prev => prev.map(p => p.id === progSelectionne.id ? progMaj : p));
     setEditCreneau(null);
     setFormCreneau({ libelle: '', contenu: '', categorie: 'travail' });
+  }
+
+  // ------------------------------------------------------------------
+  // Edition d'une cellule precise (jour x creneau), independamment du
+  // reste de la ligne. Gere aussi l'ancien format ou cellules[jourId]
+  // etait une simple chaine (bug de l'ancien ScannerOCR), pour ne pas
+  // perdre les donnees deja importees avant leur premiere modification.
+  // ------------------------------------------------------------------
+  function ouvrirEditionCellule(cr, jour) {
+    const cellule = cr.cellules?.[jour.id];
+
+    const contenu =
+      typeof cellule === 'string'
+        ? cellule
+        : cellule?.contenu || cr.contenu || '';
+
+    const categorie =
+      typeof cellule === 'string'
+        ? cr.categorie || 'autre'
+        : cellule?.categorie || cr.categorie || 'autre';
+
+    setEditCellule({
+      creneauId: cr.id,
+      jourId: jour.id,
+      jourNom: jour.nom,
+      horaire: cr.libelle
+    });
+
+    setFormCellule({ contenu, categorie });
+  }
+
+  async function enregistrerCellule() {
+    if (!editCellule) return;
+
+    const creneauxMaj = (progSelectionne.creneaux || []).map(cr => {
+      if (cr.id !== editCellule.creneauId) return cr;
+
+      const cellules = { ...(cr.cellules || {}) };
+
+      if (!formCellule.contenu.trim()) {
+        delete cellules[String(editCellule.jourId)];
+      } else {
+        cellules[String(editCellule.jourId)] = {
+          contenu: formCellule.contenu.trim(),
+          categorie: formCellule.categorie
+        };
+      }
+
+      return { ...cr, cellules };
+    });
+
+    try {
+      await base44.entities.Programme.update(progSelectionne.id, { creneaux: creneauxMaj });
+
+      const progMaj = { ...progSelectionne, creneaux: creneauxMaj };
+      setProgSelectionne(progMaj);
+      setProgrammes(prev => prev.map(p => p.id === progSelectionne.id ? progMaj : p));
+
+      setEditCellule(null);
+      setFormCellule({ contenu: '', categorie: 'autre' });
+    } catch (err) {
+      console.error("Erreur modification cellule :", err);
+    }
   }
 
   async function toggleFavori(prog) {
@@ -214,7 +279,7 @@ export default function Programmes() {
                 <tr className="border-b border-border">
                   <th className="text-left p-3 text-muted-foreground font-bold w-24">HORAIRE</th>
                   {joursActifs.map(j => (
-                    <th key={j.id} className="p-3 text-muted-foreground font-bold text-center min-w-[80px]">{j.nom.slice(0,3).toUpperCase()}</th>
+                    <th key={j.id} className="p-3 text-muted-foreground font-bold text-center min-w-[80px]">{j.nom.slice(0, 3).toUpperCase()}</th>
                   ))}
                   <th className="w-10"></th>
                 </tr>
@@ -230,18 +295,41 @@ export default function Programmes() {
                         <td className="p-3 text-muted-foreground font-mono whitespace-nowrap">{cr.libelle}</td>
                         {joursActifs.map(j => {
                           const cellule = cr.cellules?.[j.id];
-                          const contenu = cellule?.contenu || cr.contenu || '';
-                          const cat = CATEGORIES[cellule?.categorie || cr.categorie] || CATEGORIES.autre;
+                          // Compatibilite ascendante : une cellule peut encore
+                          // etre une simple chaine (ancien format OCR). Dans ce
+                          // cas, la chaine EST le contenu -- il ne faut pas
+                          // retomber sur cr.contenu, sinon la valeur importee
+                          // disparait silencieusement de l'affichage.
+                          const contenu =
+                            typeof cellule === 'string'
+                              ? cellule
+                              : cellule?.contenu || cr.contenu || '';
+                          const categorieCellule =
+                            typeof cellule === 'string'
+                              ? cr.categorie
+                              : cellule?.categorie || cr.categorie;
+                          const cat = CATEGORIES[categorieCellule] || CATEGORIES.autre;
                           return (
                             <td key={j.id} className="p-2 text-center">
-                              {contenu ? (
-                                <div className="rounded-lg px-2 py-1.5 text-xs font-semibold" style={{ background: `${cat.color}20`, color: cat.color }}>
-                                  <div>{cat.icon}</div>
-                                  <div className="mt-0.5 text-[10px] leading-tight">{contenu}</div>
-                                </div>
-                              ) : (
-                                <div className="rounded-lg px-2 py-1.5 text-xs text-muted-foreground" style={{ background: 'rgba(255,255,255,0.03)' }}>—</div>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => ouvrirEditionCellule(cr, j)}
+                                className="w-full rounded-lg px-2 py-2 text-xs font-semibold transition-all hover:ring-2 hover:ring-gold/50"
+                                style={
+                                  contenu
+                                    ? { background: `${cat.color}20`, color: cat.color }
+                                    : { background: 'rgba(255,255,255,0.03)', color: '#666677' }
+                                }
+                              >
+                                {contenu ? (
+                                  <>
+                                    <div>{cat.icon}</div>
+                                    <div className="mt-0.5 text-[10px] leading-tight">{contenu}</div>
+                                  </>
+                                ) : (
+                                  <span>+</span>
+                                )}
+                              </button>
                             </td>
                           );
                         })}
@@ -312,7 +400,7 @@ export default function Programmes() {
           </div>
         )}
 
-        {/* Modal modification créneau */}
+        {/* Modal modification créneau (ligne entiere) */}
         {editCreneau && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
             <div className="w-full max-w-md rounded-2xl border border-border p-6" style={{ background: '#0D0D18' }}>
@@ -355,6 +443,62 @@ export default function Programmes() {
             </div>
           </div>
         )}
+
+        {/* Modal modification d'une cellule precise (jour x creneau) */}
+        {editCellule && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
+            <div className="w-full max-w-md rounded-2xl border border-border p-6" style={{ background: '#0D0D18' }}>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-base font-black text-foreground">Modifier la cellule</h2>
+                  <p className="text-xs text-muted-foreground mt-1">{editCellule.jourNom} · {editCellule.horaire}</p>
+                </div>
+                <button onClick={() => { setEditCellule(null); setFormCellule({ contenu: '', categorie: 'autre' }); }}>
+                  <X size={20} className="text-muted-foreground" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold tracking-widest text-muted-foreground block mb-1.5">ACTIVITÉ</label>
+                  <input
+                    autoFocus
+                    value={formCellule.contenu}
+                    onChange={e => setFormCellule(f => ({ ...f, contenu: e.target.value }))}
+                    placeholder="Ex: Maths, Sport, Lecture..."
+                    className="w-full bg-accent border border-border rounded-xl px-4 py-2.5 text-sm text-foreground outline-none focus:border-gold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold tracking-widest text-muted-foreground block mb-1.5">CATÉGORIE</label>
+                  <select
+                    value={formCellule.categorie}
+                    onChange={e => setFormCellule(f => ({ ...f, categorie: e.target.value }))}
+                    className="w-full bg-accent border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none"
+                  >
+                    {Object.entries(CATEGORIES).map(([k, v]) => (
+                      <option key={k} value={k}>{v.icon} {v.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setEditCellule(null); setFormCellule({ contenu: '', categorie: 'autre' }); }}
+                    className="flex-1 py-3 rounded-xl font-bold text-sm border border-border text-muted-foreground"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={enregistrerCellule}
+                    className="flex-1 py-3 rounded-xl font-black text-sm"
+                    style={{ background: 'var(--gold)', color: '#080810' }}
+                  >
+                    ENREGISTRER
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -383,16 +527,16 @@ export default function Programmes() {
             <div className="space-y-3">
               {[
                 { id: 'generer', emoji: '✨', titre: 'Génération guidée', desc: 'Quelques questions → programme automatique', color: 'var(--gold)' },
-                { id: 'template', emoji: '📋', titre: 'Utiliser un template', desc: 'Modèle prêt à l\'emploi (étudiant, sportif…)', color: '#9B59B6' },
+                { id: 'template', emoji: '📋', titre: 'Utiliser un template', desc: "Modèle prêt à l'emploi (étudiant, sportif…)", color: '#9B59B6' },
                 { id: 'scanner', emoji: '📷', titre: 'Importer un fichier / Scanner', desc: 'Importer une image ou un document (OCR)', color: '#2ECC71' },
-                { id: 'manuel', emoji: '🛠️', titre: 'Créer manuellement', desc: 'Partir d\'un tableau vide', color: '#3498DB' },
+                { id: 'manuel', emoji: '🛠️', titre: 'Créer manuellement', desc: "Partir d'un tableau vide", color: '#3498DB' },
               ].map(v => (
-                <button key={v.id} onClick={() => { 
+                <button key={v.id} onClick={() => {
                   if (v.id === 'scanner') {
                     setShowScanner(true);
                   } else {
-                    setVoie(v.id); 
-                    setEtape(1); 
+                    setVoie(v.id);
+                    setEtape(1);
                   }
                 }}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left hover:border-gold"
