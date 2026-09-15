@@ -8,36 +8,15 @@ import {
   CheckCircle2,
   Loader2,
   Calendar,
-  Edit3,
-  AlertTriangle
+  RotateCcw
 } from 'lucide-react';
 import { JOURS } from '@/lib/coachData';
 
-/*
-|--------------------------------------------------------------------------
-| CONFIGURATION DU TABLEAU
-|--------------------------------------------------------------------------
-|
-| Format exact :
-|
-| Horaire | Lundi | Mardi | Mercredi | Jeudi | Vendredi | Samedi | Dimanche
-|
-| 10 lignes :
-| 06h45-07h25
-| 08h00-12h00
-| 12h00-13h00
-| 13h00-17h00
-| 17h00-18h00
-| 18h00-19h00
-| 19h00-19h50
-| 19h50-20h50
-| 20h50-21h30
-| 21h30-22h00
-|
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   CONFIGURATION
+   ========================================================= */
 
-const JOURS_OCR = [
+const NOMS_JOURS = [
   'lundi',
   'mardi',
   'mercredi',
@@ -45,19 +24,6 @@ const JOURS_OCR = [
   'vendredi',
   'samedi',
   'dimanche'
-];
-
-const HORAIRES_REFERENCE = [
-  '06h45-07h25',
-  '08h00-12h00',
-  '12h00-13h00',
-  '13h00-17h00',
-  '17h00-18h00',
-  '18h00-19h00',
-  '19h00-19h50',
-  '19h50-20h50',
-  '20h50-21h30',
-  '21h30-22h00'
 ];
 
 const CATEGORIE_KEYWORDS = {
@@ -120,21 +86,19 @@ const CATEGORIE_KEYWORDS = {
     'bibliotheque',
     'math',
     'maths',
-    'algèbre',
-    'algebre',
-    'analyse',
     'physique',
     'chimie',
-    'informatique',
-    'anglais',
-    'français',
-    'francais',
-    'techniques',
+    'géologie',
+    'geologie',
+    'mine',
+    'mines',
+    'technique',
     'recherche',
-    'exercices',
-    'fiches',
+    'exercice',
     'td',
-    'cm'
+    'tp',
+    'prépa',
+    'prepa'
   ],
 
   travail: [
@@ -143,8 +107,7 @@ const CATEGORIE_KEYWORDS = {
     'réunion',
     'reunion',
     'bureau',
-    'job',
-    'profond'
+    'job'
   ],
 
   social: [
@@ -156,40 +119,23 @@ const CATEGORIE_KEYWORDS = {
   ]
 };
 
-/*
-|--------------------------------------------------------------------------
-| TEXTE
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   OUTILS TEXTE
+   ========================================================= */
 
 function normaliser(txt = '') {
   return String(txt)
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[|]/g, 'i')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function nettoyerTexte(txt = '') {
-  return String(txt)
-    .replace(/[|]/g, 'I')
-    .replace(/\s+/g, ' ')
     .trim();
 }
 
 function deviner_categorie(texte = '') {
   const t = normaliser(texte);
 
-  for (const [categorie, mots] of Object.entries(
-    CATEGORIE_KEYWORDS
-  )) {
-    if (
-      mots.some(mot =>
-        t.includes(normaliser(mot))
-      )
-    ) {
+  for (const [categorie, mots] of Object.entries(CATEGORIE_KEYWORDS)) {
+    if (mots.some(mot => t.includes(normaliser(mot)))) {
       return categorie;
     }
   }
@@ -197,925 +143,452 @@ function deviner_categorie(texte = '') {
   return 'autre';
 }
 
-/*
-|--------------------------------------------------------------------------
-| CHARGEMENT IMAGE
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   FICHIER → DATA URL
+   ========================================================= */
 
-function chargerImage(file) {
+function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
-    const image = new Image();
+    const reader = new FileReader();
 
-    image.onload = () => {
-      resolve(image);
-    };
+    reader.onload = () => resolve(reader.result);
 
-    image.onerror = () => {
+    reader.onerror = () =>
       reject(
         new Error(
-          "Impossible de charger l'image."
+          "Impossible de lire le fichier sélectionné."
         )
       );
-    };
 
-    image.src = URL.createObjectURL(file);
+    reader.readAsDataURL(file);
   });
 }
 
-/*
-|--------------------------------------------------------------------------
-| PRÉTRAITEMENT
-|--------------------------------------------------------------------------
-|
-| On agrandit l'image avant OCR.
-|
-| Les textes de votre tableau sont relativement petits.
-| L'agrandissement améliore beaucoup la reconnaissance.
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   OCR : EXTRACTION DES MOTS
+   ========================================================= */
 
-async function preparerImage(file) {
-  const image = await chargerImage(file);
-
-  const largeurOriginale = image.naturalWidth;
-  const hauteurOriginale = image.naturalHeight;
-
-  /*
-   * On limite l'agrandissement pour éviter de faire exploser
-   * la mémoire sur téléphone.
-   */
-  const facteur = 2;
-
-  const largeur = Math.min(
-    largeurOriginale * facteur,
-    5000
-  );
-
-  const hauteur =
-    hauteurOriginale *
-    (largeur / largeurOriginale);
-
-  const canvas =
-    document.createElement('canvas');
-
-  canvas.width = Math.round(largeur);
-  canvas.height = Math.round(hauteur);
-
-  const ctx =
-    canvas.getContext('2d', {
-      willReadFrequently: true
-    });
-
-  /*
-   * Fond blanc.
-   */
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-
-  ctx.drawImage(
-    image,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  URL.revokeObjectURL(image.src);
-
-  return canvas;
-}
-
-/*
-|--------------------------------------------------------------------------
-| OCR
-|--------------------------------------------------------------------------
-*/
-
-function extraire_mots(data) {
+function extraire_mots(dataTesseract) {
   const mots = [];
 
-  /*
-   * Tesseract fournit normalement data.words.
-   */
-  if (Array.isArray(data?.words)) {
-    data.words.forEach(word => {
-      if (
-        !word?.bbox ||
-        !word?.text?.trim()
-      ) {
-        return;
-      }
+  const blocks = dataTesseract?.blocks || [];
 
-      const confidence =
-        Number(word.confidence ?? 100);
+  blocks.forEach(block => {
+    (block.paragraphs || []).forEach(paragraphe => {
+      (paragraphe.lines || []).forEach(ligne => {
+        (ligne.words || []).forEach(word => {
+          if (
+            word?.bbox &&
+            word.text &&
+            word.text.trim()
+          ) {
+            mots.push({
+              text: word.text.trim(),
 
-      /*
-       * On élimine uniquement les reconnaissances
-       * extrêmement mauvaises.
-       */
-      if (
-        Number.isFinite(confidence) &&
-        confidence < 15
-      ) {
-        return;
-      }
+              x0: word.bbox.x0,
+              x1: word.bbox.x1,
 
-      mots.push({
-        text: nettoyerTexte(word.text),
-
-        x0: Number(word.bbox.x0),
-        x1: Number(word.bbox.x1),
-        y0: Number(word.bbox.y0),
-        y1: Number(word.bbox.y1),
-
-        confidence
+              y0: word.bbox.y0,
+              y1: word.bbox.y1
+            });
+          }
+        });
       });
     });
-  }
-
-  /*
-   * Compatibilité anciennes versions Tesseract.
-   */
-  if (mots.length === 0) {
-    const blocks =
-      data?.blocks || [];
-
-    blocks.forEach(block => {
-      (block.paragraphs || [])
-        .forEach(paragraph => {
-
-          (paragraph.lines || [])
-            .forEach(line => {
-
-              (line.words || [])
-                .forEach(word => {
-
-                  if (
-                    !word?.bbox ||
-                    !word?.text?.trim()
-                  ) {
-                    return;
-                  }
-
-                  mots.push({
-                    text:
-                      nettoyerTexte(
-                        word.text
-                      ),
-
-                    x0:
-                      Number(
-                        word.bbox.x0
-                      ),
-
-                    x1:
-                      Number(
-                        word.bbox.x1
-                      ),
-
-                    y0:
-                      Number(
-                        word.bbox.y0
-                      ),
-
-                    y1:
-                      Number(
-                        word.bbox.y1
-                      ),
-
-                    confidence:
-                      Number(
-                        word.confidence ??
-                        100
-                      )
-                  });
-                });
-            });
-        });
-    });
-  }
+  });
 
   return mots;
 }
 
-/*
-|--------------------------------------------------------------------------
-| HORAIRE
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   REGROUPEMENT DES MOTS PAR LIGNE
+   ========================================================= */
 
-function convertirHoraire(texte) {
-  if (!texte) return null;
+function grouper_en_lignes(mots) {
+  const tries = [...mots].sort(
+    (a, b) =>
+      (a.y0 + a.y1) / 2 -
+      (b.y0 + b.y1) / 2
+  );
 
-  let t = normaliser(texte);
+  if (!tries.length) {
+    return [];
+  }
+
+  const hauteurMoyenne =
+    tries.reduce(
+      (s, m) => s + (m.y1 - m.y0),
+      0
+    ) / tries.length;
+
+  const seuil = Math.max(
+    hauteurMoyenne * 0.75,
+    10
+  );
+
+  const lignes = [];
+
+  tries.forEach(mot => {
+    const centreY =
+      (mot.y0 + mot.y1) / 2;
+
+    let ligne = lignes.find(
+      l => Math.abs(l.centreY - centreY) < seuil
+    );
+
+    if (!ligne) {
+      ligne = {
+        centreY,
+        mots: []
+      };
+
+      lignes.push(ligne);
+    }
+
+    ligne.mots.push(mot);
+
+    ligne.centreY =
+      ligne.mots.reduce(
+        (s, m) =>
+          s + (m.y0 + m.y1) / 2,
+        0
+      ) / ligne.mots.length;
+  });
+
+  lignes.forEach(ligne => {
+    ligne.mots.sort(
+      (a, b) => a.x0 - b.x0
+    );
+  });
+
+  lignes.sort(
+    (a, b) =>
+      a.centreY - b.centreY
+  );
+
+  return lignes;
+}
+
+/* =========================================================
+   DÉTECTION DU JOUR
+   ========================================================= */
+
+function trouverJour(text) {
+  const t = normaliser(text);
+
+  const correspondances = {
+    lun: 'lundi',
+    lundi: 'lundi',
+
+    mar: 'mardi',
+    mardi: 'mardi',
+
+    mer: 'mercredi',
+    mercredi: 'mercredi',
+
+    jeu: 'jeudi',
+    jeudi: 'jeudi',
+
+    ven: 'vendredi',
+    vendredi: 'vendredi',
+
+    sam: 'samedi',
+    samedi: 'samedi',
+
+    dim: 'dimanche',
+    dimanche: 'dimanche'
+  };
+
+  return correspondances[t] || null;
+}
+
+/* =========================================================
+   DÉTECTION DES COLONNES DU TABLEAU
+   ========================================================= */
+
+function detecterColonnes(lignes) {
+  let meilleureLigne = null;
+  let meilleursJours = [];
+
+  lignes.forEach(ligne => {
+    const jours = [];
+
+    ligne.mots.forEach(mot => {
+      const jour = trouverJour(mot.text);
+
+      if (jour) {
+        jours.push({
+          jour,
+          centre:
+            (mot.x0 + mot.x1) / 2
+        });
+      }
+    });
+
+    if (jours.length > meilleursJours.length) {
+      meilleursJours = jours;
+      meilleureLigne = ligne;
+    }
+  });
+
+  if (
+    !meilleureLigne ||
+    meilleursJours.length < 3
+  ) {
+    return null;
+  }
+
+  meilleursJours.sort(
+    (a, b) => a.centre - b.centre
+  );
 
   /*
-   * Corrections OCR fréquentes.
+   * On élimine les doublons éventuels.
    */
-  t = t
-    .replace(/[oO]/g, '0')
-    .replace(/[iIlL|]/g, '1')
-    .replace(/[–—−]/g, '-')
-    .replace(/,/g, '.')
-    .replace(/\s+/g, '');
+  const joursUniques = [];
+
+  meilleursJours.forEach(j => {
+    if (
+      !joursUniques.some(
+        x => x.jour === j.jour
+      )
+    ) {
+      joursUniques.push(j);
+    }
+  });
+
+  return {
+    headerY: meilleureLigne.centreY,
+    jours: joursUniques
+  };
+}
+
+/* =========================================================
+   DÉTECTION DES HORAIRES
+   ========================================================= */
+
+function extraireHoraire(texte) {
+  const t = normaliser(texte)
+    .replace(/o/g, '0')
+    .replace(/i/g, '1')
+    .replace(/l/g, '1');
 
   /*
    * Exemples reconnus :
    *
    * 06h45-07h25
    * 06h45–07h25
-   * 06:45-07:25
-   * 6h45-7h25
+   * 08h00-12h00
+   * 08:00-12:00
+   * 08h00 12h00
    */
 
-  const match = t.match(
-    /(\d{1,2})[:h](\d{2})[-](\d{1,2})[:h](\d{2})/
-  );
+  const regex =
+    /(\d{1,2})\s*[h:]\s*(\d{0,2})\s*[-–—àa]\s*(\d{1,2})\s*[h:]\s*(\d{0,2})/i;
+
+  const match = t.match(regex);
 
   if (!match) {
     return null;
   }
 
-  let [
-    ,
-    h1,
-    m1,
-    h2,
-    m2
-  ] = match;
+  const h1 = match[1];
+  const m1 = match[2] || '00';
+  const h2 = match[3];
+  const m2 = match[4] || '00';
 
-  h1 = h1.padStart(2, '0');
-  h2 = h2.padStart(2, '0');
-
-  return `${h1}h${m1}-${h2}h${m2}`;
+  return (
+    `${h1.padStart(2, '0')}h` +
+    `${m1.padStart(2, '0')}-` +
+    `${h2.padStart(2, '0')}h` +
+    `${m2.padStart(2, '0')}`
+  );
 }
 
-/*
-|--------------------------------------------------------------------------
-| EXTRACTION DES HORAIRES PAR POSITION
-|--------------------------------------------------------------------------
-|
-| On connaît les horaires du modèle.
-|
-| L'OCR peut lire :
-|
-| 06h45-07r25
-|
-| au lieu de :
-|
-| 06h45-07h25
-|
-| On utilise donc aussi la position verticale.
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   EXTRACTION DU TABLEAU PRÉPA 1 GM
+   ========================================================= */
 
-function trouverLignesHoraires(
-  mots,
-  hauteurImage
-) {
-  /*
-   * Le tableau principal occupe environ :
-   *
-   * y = 10% → 56% de l'image
-   *
-   * On cherche les mots horaires dans cette zone.
-   */
-  const candidats = [];
+function extraire_tableau(mots) {
+  const lignes = grouper_en_lignes(mots);
 
-  for (const mot of mots) {
-    const texte =
-      normaliser(mot.text);
+  const colonnes = detecterColonnes(lignes);
 
-    const y =
-      (mot.y0 + mot.y1) / 2;
-
-    if (
-      y < hauteurImage * 0.08 ||
-      y > hauteurImage * 0.60
-    ) {
-      continue;
-    }
-
-    /*
-     * Un horaire OCR peut être dans un seul mot.
-     */
-    if (
-      convertirHoraire(texte)
-    ) {
-      candidats.push({
-        y,
-        texte: convertirHoraire(texte)
-      });
-
-      continue;
-    }
-
-    /*
-     * Quelques variantes OCR.
-     */
-    const compact =
-      texte
-        .replace(/[oO]/g, '0')
-        .replace(/[iIlL|]/g, '1')
-        .replace(/[–—−]/g, '-')
-        .replace(/\s+/g, '');
-
-    const chiffres =
-      compact.match(
-        /(\d{1,2})\D?(\d{2})\D+(\d{1,2})\D?(\d{2})/
-      );
-
-    if (chiffres) {
-      const h1 =
-        chiffres[1]
-          .padStart(2, '0');
-
-      const m1 =
-        chiffres[2];
-
-      const h2 =
-        chiffres[3]
-          .padStart(2, '0');
-
-      const m2 =
-        chiffres[4];
-
-      candidats.push({
-        y,
-        texte:
-          `${h1}h${m1}-${h2}h${m2}`
-      });
-    }
-  }
-
-  /*
-   * Regrouper les horaires proches verticalement.
-   */
-  candidats.sort(
-    (a, b) => a.y - b.y
-  );
-
-  const groupes = [];
-
-  for (const candidat of candidats) {
-    let groupe =
-      groupes.find(
-        g =>
-          Math.abs(
-            g.y - candidat.y
-          ) < hauteurImage * 0.012
-      );
-
-    if (!groupe) {
-      groupe = {
-        y: candidat.y,
-        candidats: []
-      };
-
-      groupes.push(groupe);
-    }
-
-    groupe.candidats.push(
-      candidat
-    );
-  }
-
-  const resultats =
-    groupes.map(groupe => {
-
-      /*
-       * Si plusieurs détections,
-       * prendre celle qui ressemble le plus
-       * à un horaire valide.
-       */
-      let meilleur =
-        groupe.candidats[0];
-
-      return {
-        y: groupe.y,
-        horaire:
-          meilleur?.texte
-      };
-    });
-
-  /*
-   * On tente de compléter avec les horaires
-   * de référence si l'OCR en a raté certains.
-   */
-  const propres = [];
-
-  resultats.forEach(item => {
-    if (
-      item.horaire &&
-      !propres.some(
-        x =>
-          Math.abs(
-            x.y - item.y
-          ) <
-          hauteurImage * 0.015
-      )
-    ) {
-      propres.push(item);
-    }
-  });
-
-  return propres.slice(0, 10);
-}
-
-/*
-|--------------------------------------------------------------------------
-| ESTIMATION GÉOMÉTRIQUE DU TABLEAU
-|--------------------------------------------------------------------------
-|
-| Format exact du document :
-|
-| ┌─────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┐
-| │ Horaire │ Lundi  │ Mardi  │ Mercr. │ Jeudi  │ Vend.  │ Samedi │ Dim.   │
-| └─────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┘
-|
-|--------------------------------------------------------------------------
-*/
-
-function definirGrille(
-  largeur,
-  hauteur
-) {
-  /*
-   * Ces proportions correspondent au document fourni.
-   *
-   * Elles sont volontairement légèrement élargies
-   * afin de fonctionner avec une photo/capture du même
-   * tableau.
-   */
-
-  const gauche =
-    largeur * 0.012;
-
-  const droite =
-    largeur * 0.988;
-
-  const haut =
-    hauteur * 0.103;
-
-  const bas =
-    hauteur * 0.568;
-
-  const largeurTableau =
-    droite - gauche;
-
-  /*
-   * 8 colonnes :
-   * 1 horaire + 7 jours.
-   *
-   * La colonne horaire est plus petite.
-   */
-  const largeurHoraire =
-    largeurTableau * 0.075;
-
-  const debutJours =
-    gauche + largeurHoraire;
-
-  const largeurJour =
-    (droite - debutJours) / 7;
-
-  const colonnes = [];
-
-  /*
-   * Colonne Horaire.
-   */
-  colonnes.push({
-    type: 'horaire',
-    index: -1,
-    gauche,
-    droite: debutJours
-  });
-
-  /*
-   * 7 jours.
-   */
-  for (let i = 0; i < 7; i++) {
-    colonnes.push({
-      type: 'jour',
-      index: i,
-      jour:
-        JOURS_OCR[i],
-      gauche:
-        debutJours +
-        i * largeurJour,
-      droite:
-        debutJours +
-        (i + 1) *
-          largeurJour
-    });
-  }
-
-  /*
-   * Le header bleu représente environ 6%
-   * de la hauteur du tableau.
-   */
-  const hauteurHeader =
-    (bas - haut) * 0.065;
-
-  const debutLignes =
-    haut + hauteurHeader;
-
-  /*
-   * 10 lignes.
-   *
-   * On utilise les proportions réelles du tableau.
-   */
-  const hauteurDonnees =
-    bas - debutLignes;
-
-  const lignes = [];
-
-  for (let i = 0; i < 10; i++) {
-    lignes.push({
-      index: i,
-
-      haut:
-        debutLignes +
-        (i / 10) *
-          hauteurDonnees,
-
-      bas:
-        debutLignes +
-        ((i + 1) / 10) *
-          hauteurDonnees,
-
-      horaire:
-        HORAIRES_REFERENCE[i]
-    });
-  }
-
-  return {
-    gauche,
-    droite,
-    haut,
-    bas,
-    colonnes,
-    lignes
-  };
-}
-
-/*
-|--------------------------------------------------------------------------
-| ASSIGNATION DES MOTS AUX CELLULES
-|--------------------------------------------------------------------------
-*/
-
-function reconstruireTableau(
-  mots,
-  largeur,
-  hauteur
-) {
-  const grille =
-    definirGrille(
-      largeur,
-      hauteur
-    );
-
-  /*
-   * Structure :
-   *
-   * [
-   *   {
-   *     horaire: "08h00-12h00",
-   *     parJour: {
-   *       lundi: "...",
-   *       mardi: "...",
-   *       ...
-   *     }
-   *   }
-   * ]
-   */
-
-  const resultats =
-    grille.lignes.map(
-      ligne => ({
-        horaire:
-          ligne.horaire,
-        parJour: {}
-      })
-    );
-
-  /*
-   * On ignore les mots :
-   *
-   * - au-dessus du tableau
-   * - dans le header
-   * - sous le tableau
-   */
-  const motsUtiles =
-    mots.filter(mot => {
-      const x =
-        (mot.x0 + mot.x1) / 2;
-
-      const y =
-        (mot.y0 + mot.y1) / 2;
-
-      return (
-        x >= grille.gauche &&
-        x <= grille.droite &&
-        y >= grille.haut &&
-        y <= grille.bas
-      );
-    });
-
-  /*
-   * Chaque mot est affecté à :
-   *
-   * 1 ligne
-   * 1 colonne
-   */
-  motsUtiles.forEach(mot => {
-    const x =
-      (mot.x0 + mot.x1) / 2;
-
-    const y =
-      (mot.y0 + mot.y1) / 2;
-
-    const ligne =
-      grille.lignes.find(
-        l =>
-          y >= l.haut &&
-          y < l.bas
-      );
-
-    if (!ligne) return;
-
-    const colonne =
-      grille.colonnes.find(
-        c =>
-          x >= c.gauche &&
-          x < c.droite
-      );
-
-    if (!colonne) return;
-
-    /*
-     * On ne met pas la colonne horaire dans
-     * les activités.
-     */
-    if (
-      colonne.type !== 'jour'
-    ) {
-      return;
-    }
-
-    const jour =
-      colonne.jour;
-
-    if (!resultats[ligne.index].parJour[jour]) {
-      resultats[
-        ligne.index
-      ].parJour[jour] = [];
-    }
-
-    resultats[
-      ligne.index
-    ].parJour[jour].push({
-      text: mot.text,
-      x,
-      y
-    });
-  });
-
-  /*
-   * Recomposer chaque cellule.
-   *
-   * Les mots sont triés :
-   *
-   * d'abord verticalement,
-   * puis horizontalement.
-   */
-  resultats.forEach(ligne => {
-    Object.keys(
-      ligne.parJour
-    ).forEach(jour => {
-
-      const motsCellule =
-        ligne.parJour[jour];
-
-      motsCellule.sort(
-        (a, b) => {
-
-          const differenceY =
-            a.y - b.y;
-
-          /*
-           * Si les mots sont sur des lignes
-           * différentes, garder l'ordre vertical.
-           */
-          if (
-            Math.abs(differenceY) >
-            10
-          ) {
-            return differenceY;
-          }
-
-          return a.x - b.x;
-        }
-      );
-
-      /*
-       * On reconstruit le texte.
-       *
-       * Exemple :
-       *
-       * Travail profond : Techniques de
-       * recherche / cours du jour
-       * Exercices + fiches
-       *
-       * devient :
-       *
-       * Travail profond : Techniques de recherche / cours du jour Exercices + fiches
-       */
-      ligne.parJour[jour] =
-        motsCellule
-          .map(m => m.text)
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-    });
-  });
-
-  /*
-   * Détection intelligente des horaires.
-   *
-   * Si OCR trouve un horaire qui correspond
-   * à une ligne, on le remplace.
-   */
-  const lignesOCR =
-    trouverLignesHoraires(
-      mots,
-      hauteur
-    );
-
-  lignesOCR.forEach(
-    item => {
-
-      const ligne =
-        grille.lignes.find(
-          l =>
-            Math.abs(
-              (
-                (l.haut + l.bas) /
-                2
-              ) - item.y
-            ) <
-            hauteur * 0.025
-        );
-
-      if (
-        ligne &&
-        item.horaire
-      ) {
-        resultats[
-          ligne.index
-        ].horaire =
-          item.horaire;
-      }
-    }
-  );
-
-  /*
-   * Nettoyage.
-   */
-  resultats.forEach(
-    ligne => {
-      Object.keys(
-        ligne.parJour
-      ).forEach(jour => {
-
-        const texte =
-          ligne.parJour[jour];
-
-        /*
-         * Ne pas conserver des cellules
-         * contenant uniquement des fragments
-         * d'horaire.
-         */
-        if (
-          !texte ||
-          texte.length < 2 ||
-          convertirHoraire(texte)
-        ) {
-          delete ligne.parJour[
-            jour
-          ];
-        }
-      });
-    }
-  );
-
-  /*
-   * Vérification :
-   * combien de cellules avons-nous trouvées ?
-   */
-  let nombreCellules = 0;
-
-  resultats.forEach(
-    ligne => {
-      nombreCellules +=
-        Object.keys(
-          ligne.parJour
-        ).length;
-    }
-  );
-
-  console.log(
-    'OCR : cellules détectées =',
-    nombreCellules
-  );
-
-  console.log(
-    'OCR : tableau reconstruit =',
-    resultats
-  );
-
-  /*
-   * Au minimum, il faut plusieurs cellules.
-   */
-  if (
-    nombreCellules < 3
-  ) {
+  if (!colonnes) {
     return null;
   }
 
-  return resultats;
+  /*
+   * On utilise les centres des jours détectés.
+   * Le tableau possède normalement :
+   *
+   * Horaire | Lundi | Mardi | Mercredi | Jeudi |
+   * Vendredi | Samedi | Dimanche
+   */
+
+  const centres = colonnes.jours;
+
+  /*
+   * Estimation des limites de chaque colonne.
+   */
+
+  const bornes = centres.map((col, index) => {
+    const gauche =
+      index === 0
+        ? -Infinity
+        : (centres[index - 1].centre +
+            col.centre) /
+          2;
+
+    const droite =
+      index === centres.length - 1
+        ? Infinity
+        : (col.centre +
+            centres[index + 1].centre) /
+          2;
+
+    return {
+      jour: col.jour,
+      gauche,
+      droite
+    };
+  });
+
+  const resultats = [];
+
+  /*
+   * On analyse toutes les lignes situées
+   * sous l'en-tête.
+   */
+
+  for (
+    let i = 0;
+    i < lignes.length;
+    i++
+  ) {
+    const ligne = lignes[i];
+
+    if (
+      ligne.centreY <=
+      colonnes.headerY
+    ) {
+      continue;
+    }
+
+    if (!ligne.mots.length) {
+      continue;
+    }
+
+    const texteLigne =
+      ligne.mots
+        .map(m => m.text)
+        .join(' ');
+
+    const horaire =
+      extraireHoraire(texteLigne);
+
+    /*
+     * Une ligne du tableau doit avoir
+     * un horaire.
+     */
+
+    if (!horaire) {
+      continue;
+    }
+
+    /*
+     * On récupère les textes situés
+     * dans chaque colonne.
+     */
+
+    const parJour = {};
+
+    bornes.forEach(borne => {
+      const motsColonne =
+        ligne.mots.filter(mot => {
+          const centre =
+            (mot.x0 + mot.x1) / 2;
+
+          return (
+            centre >= borne.gauche &&
+            centre < borne.droite
+          );
+        });
+
+      const texte =
+        motsColonne
+          .map(m => m.text)
+          .join(' ')
+          .trim();
+
+      if (texte) {
+        parJour[borne.jour] = texte;
+      }
+    });
+
+    /*
+     * On ajoute même les lignes où
+     * seulement une partie des jours
+     * a été reconnue.
+     */
+
+    if (
+      Object.keys(parJour).length > 0
+    ) {
+      resultats.push({
+        horaire,
+        parJour
+      });
+    }
+  }
+
+  return resultats.length
+    ? resultats
+    : null;
 }
 
-/*
-|--------------------------------------------------------------------------
-| CONSTRUCTION DES CRÉNEAUX
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   CRÉATION DES CRÉNEAUX
+   ========================================================= */
 
-function construireCreneaux(
+function construire_creneaux_depuis_tableau(
   tableau
 ) {
   return tableau.map(
-    (ligne, index) => {
-
+    ({ horaire, parJour }) => {
       const cellules = {};
 
-      JOURS_OCR.forEach(
-        (jour, jourIndex) => {
-
-          const valeur =
-            ligne.parJour[
-              jour
-            ];
-
-          if (
-            valeur &&
-            valeur.trim()
-          ) {
-            cellules[
-              String(jourIndex)
-            ] =
-              valeur.trim();
-          }
+      NOMS_JOURS.forEach(
+        (jourNom, index) => {
+          cellules[String(index)] =
+            parJour[jourNom] || '';
         }
       );
 
       /*
-       * Le contenu principal du créneau
-       * est la première activité trouvée.
+       * On prend le premier contenu disponible
+       * comme contenu principal pour compatibilité
+       * avec la structure existante de l'application.
        */
-      const valeurs =
-        Object.values(
-          ligne.parJour
-        ).filter(Boolean);
 
-      const contenu =
-        valeurs.length > 0
-          ? valeurs[0]
-          : 'Activité';
+      const contenuPrincipal =
+        NOMS_JOURS
+          .map(jour => parJour[jour])
+          .find(
+            texte =>
+              texte &&
+              texte.trim()
+          ) || 'Activité';
 
       return {
-        id:
-          `ocr_${Date.now()}_${index}`,
-
         libelle:
-          ligne.horaire ||
-          HORAIRES_REFERENCE[index],
+          horaire || '08h00-10h00',
 
-        contenu,
+        contenu: contenuPrincipal,
 
         categorie:
           deviner_categorie(
-            contenu
+            contenuPrincipal
           ),
 
         cellules
@@ -1124,11 +597,9 @@ function construireCreneaux(
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| COMPOSANT
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   COMPOSANT
+   ========================================================= */
 
 export default function ScannerOCR({
   onProgrammeCreated,
@@ -1149,17 +620,11 @@ export default function ScannerOCR({
   const [progression, setProgression] =
     useState(0);
 
-  const [debugOCR, setDebugOCR] =
-    useState('');
+  const fileRef = useRef(null);
 
-  const fileRef =
-    useRef(null);
-
-  /*
-  |--------------------------------------------------------------------------
-  | IMPORT
-  |--------------------------------------------------------------------------
-  */
+  /* =======================================================
+     IMPORT IMAGE
+     ======================================================= */
 
   async function handleFile(file) {
     if (!file) return;
@@ -1167,97 +632,47 @@ export default function ScannerOCR({
     setLoading(true);
     setEtape('analyse');
     setErrorMsg('');
-    setDebugOCR('');
     setProgression(0);
 
-    let worker = null;
+    let worker;
 
     try {
-
-      /*
-       * Nom du programme.
-       */
-      const nomSansExtension =
+      const fileNameClean =
         file.name
-          .replace(
-            /\.[^/.]+$/,
-            ''
-          )
-          .replace(
-            /[-_]/g,
-            ' '
-          )
-          .trim();
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[-_]/g, ' ');
 
-      const nomProgramme =
-        nomSansExtension
-          ? nomSansExtension
-              .charAt(0)
-              .toUpperCase() +
-            nomSansExtension.slice(1)
-          : 'Programme Prépa 1 Géologie-Mines';
+      const formattedName =
+        fileNameClean
+          ? fileNameClean.charAt(0).toUpperCase() +
+            fileNameClean.slice(1)
+          : 'Programme Prépa 1 GM';
 
-      /*
-       * Préparation image.
-       */
-      const canvas =
-        await preparerImage(file);
-
-      /*
-       * OCR.
-       */
-      worker =
-        await createWorker(
-          'fra',
-          1,
-          {
-            logger: message => {
-
-              if (
-                message.status ===
-                'recognizing text'
-              ) {
-                setProgression(
-                  Math.round(
-                    message.progress *
-                    100
-                  )
-                );
-              }
+      worker = await createWorker(
+        'fra',
+        1,
+        {
+          logger: message => {
+            if (
+              message.status ===
+              'recognizing text'
+            ) {
+              setProgression(
+                Math.round(
+                  message.progress * 100
+                )
+              );
             }
           }
-        );
+        }
+      );
 
-      /*
-       * Paramètres adaptés au tableau.
-       */
-      try {
-        await worker.setParameters({
-          /*
-           * 6 = bloc uniforme de texte.
-           *
-           * Le tableau entier est mieux traité
-           * ainsi que comme une page libre.
-           */
-          tessedit_pageseg_mode:
-            '6',
+      const dataUrl =
+        await fileToDataURL(file);
 
-          preserve_interword_spaces:
-            '1'
-        });
-      } catch (e) {
-        console.warn(
-          'Paramètres Tesseract non appliqués :',
-          e
-        );
-      }
-
-      /*
-       * Reconnaissance.
-       */
-      const resultat =
+      const ret =
         await worker.recognize(
-          canvas,
+          dataUrl,
           {},
           {
             blocks: true,
@@ -1265,327 +680,288 @@ export default function ScannerOCR({
           }
         );
 
-      const texteOCR =
-        resultat?.data?.text ||
-        '';
-
-      setDebugOCR(
-        texteOCR
-      );
-
-      console.log(
-        '=========================='
-      );
-
-      console.log(
-        'TEXTE OCR COMPLET'
-      );
-
-      console.log(
-        texteOCR
-      );
-
-      console.log(
-        '=========================='
-      );
-
-      /*
-       * Extraction des mots + coordonnées.
-       */
       const mots =
-        extraire_mots(
-          resultat?.data
-        );
+        extraire_mots(ret.data);
 
-      if (!mots.length) {
-        throw new Error(
-          "L'OCR n'a reconnu aucun texte. Essayez une image plus nette."
-        );
-      }
-
-      console.log(
-        'NOMBRE DE MOTS OCR :',
-        mots.length
-      );
+      const tableau =
+        extraire_tableau(mots);
 
       /*
-       * Reconstruction du tableau.
+       * IMPORTANT :
+       * On ne crée plus une fausse ligne
+       * si l'OCR échoue complètement.
        */
-      const tableau =
-        reconstruireTableau(
-          mots,
-          canvas.width,
-          canvas.height
-        );
 
       if (!tableau) {
         throw new Error(
-          "Le texte a été reconnu, mais aucune grille exploitable n'a été reconstruite."
+          "Le tableau n'a pas pu être reconstruit. Le texte a peut-être été reconnu, mais les colonnes Horaire/Lundi/Mardi/etc. n'ont pas été suffisamment détectées."
         );
       }
 
-      /*
-       * Construction application.
-       */
       const creneaux =
-        construireCreneaux(
+        construire_creneaux_depuis_tableau(
           tableau
         );
 
-      if (
-        !creneaux.length
-      ) {
-        throw new Error(
-          "Aucun créneau n'a été extrait."
-        );
-      }
-
-      /*
-       * Affichage debug.
-       */
-      console.log(
-        '=========================='
-      );
-
-      console.log(
-        'CRÉNEAUX FINAUX'
-      );
-
-      console.log(
-        creneaux
-      );
-
-      console.log(
-        '=========================='
-      );
-
       setProgramme({
         nom:
-          nomProgramme,
+          formattedName ||
+          'Programme Prépa 1 Géologie-Mines',
 
         creneaux
       });
 
-      setEtape(
-        'edition'
-      );
-
-    } catch (error) {
-
+      setEtape('edition');
+    } catch (err) {
       console.error(
-        'ERREUR IMPORT OCR :',
-        error
+        'Erreur OCR :',
+        err
       );
 
       setErrorMsg(
-        error?.message ||
-        "Une erreur inconnue s'est produite."
+        `Erreur : ${
+          err?.message ||
+          String(err)
+        }`
       );
 
-      setEtape(
-        'erreur'
-      );
-
+      setEtape('erreur');
     } finally {
-
       setLoading(false);
 
       if (worker) {
-        try {
-          await worker.terminate();
-        } catch (e) {
-          console.warn(
-            'Erreur fermeture worker :',
-            e
-          );
-        }
+        await worker.terminate();
       }
 
       if (fileRef.current) {
-        fileRef.current.value =
-          '';
+        fileRef.current.value = '';
       }
     }
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | MODIFICATION CRÉNEAU
-  |--------------------------------------------------------------------------
-  */
-
-  function modifierCreneau(
-    index,
-    champ,
-    valeur
-  ) {
-    setProgramme(
-      previous => {
-
-        const nouveaux =
-          [
-            ...previous.creneaux
-          ];
-
-        nouveaux[index] = {
-          ...nouveaux[index],
-          [champ]:
-            valeur
-        };
-
-        if (
-          champ === 'contenu'
-        ) {
-          nouveaux[index]
-            .categorie =
-            deviner_categorie(
-              valeur
-            );
-        }
-
-        return {
-          ...previous,
-          creneaux:
-            nouveaux
-        };
-      }
-    );
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | MODIFICATION CELLULE
-  |--------------------------------------------------------------------------
-  */
+  /* =======================================================
+     MODIFICATION DIRECTE D'UNE CELLULE
+     ======================================================= */
 
   function modifierCelluleJour(
     indexCreneau,
     indexJour,
     valeur
   ) {
-    setProgramme(
-      previous => {
+    setProgramme(prev => {
+      if (!prev) return prev;
 
-        const nouveaux =
-          [
-            ...previous.creneaux
-          ];
+      const nouveauxCreneaux =
+        [...prev.creneaux];
 
-        const creneau = {
-          ...nouveaux[
-            indexCreneau
-          ]
-        };
+      const ancienCreneau =
+        nouveauxCreneaux[indexCreneau];
 
-        const cellules = {
-          ...(creneau.cellules ||
-            {})
-        };
+      const nouveauCreneau = {
+        ...ancienCreneau,
 
-        if (
-          valeur.trim() === ''
-        ) {
-          delete cellules[
-            String(indexJour)
-          ];
-        } else {
-          cellules[
-            String(indexJour)
-          ] =
-            valeur;
+        cellules: {
+          ...(ancienCreneau.cellules || {}),
+          [String(indexJour)]:
+            valeur
         }
+      };
 
-        creneau.cellules =
-          cellules;
+      /*
+       * Pour garder la compatibilité avec
+       * le reste de l'application, on met
+       * aussi "contenu" à jour avec la
+       * cellule actuellement modifiée.
+       */
 
-        /*
-         * Si on modifie une cellule,
-         * elle peut devenir le contenu principal
-         * uniquement si celui-ci est vide.
-         */
-        if (
-          (
-            !creneau.contenu ||
-            creneau.contenu ===
-              'Activité'
-          ) &&
-          valeur.trim()
-        ) {
-          creneau.contenu =
-            valeur.trim();
+      if (
+        valeur &&
+        valeur.trim() !== ''
+      ) {
+        nouveauCreneau.contenu =
+          valeur;
 
-          creneau.categorie =
-            deviner_categorie(
-              valeur
-            );
-        }
-
-        nouveaux[
-          indexCreneau
-        ] = creneau;
-
-        return {
-          ...previous,
-          creneaux:
-            nouveaux
-        };
+        nouveauCreneau.categorie =
+          deviner_categorie(
+            valeur
+          );
       }
-    );
+
+      nouveauxCreneaux[
+        indexCreneau
+      ] = nouveauCreneau;
+
+      return {
+        ...prev,
+        creneaux:
+          nouveauxCreneaux
+      };
+    });
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | ENREGISTREMENT SUPABASE
-  |--------------------------------------------------------------------------
-  */
+  /* =======================================================
+     MODIFICATION HORAIRE
+     ======================================================= */
+
+  function modifierHoraire(
+    index,
+    valeur
+  ) {
+    setProgramme(prev => {
+      if (!prev) return prev;
+
+      const nouveauxCreneaux =
+        [...prev.creneaux];
+
+      nouveauxCreneaux[index] = {
+        ...nouveauxCreneaux[index],
+        libelle: valeur
+      };
+
+      return {
+        ...prev,
+        creneaux:
+          nouveauxCreneaux
+      };
+    });
+  }
+
+  /* =======================================================
+     AJOUT D'UNE LIGNE
+     ======================================================= */
+
+  function ajouterCreneau() {
+    setProgramme(prev => {
+      if (!prev) return prev;
+
+      const cellules = {};
+
+      NOMS_JOURS.forEach(
+        (_, index) => {
+          cellules[String(index)] =
+            '';
+        }
+      );
+
+      return {
+        ...prev,
+
+        creneaux: [
+          ...prev.creneaux,
+
+          {
+            libelle:
+              '08h00-10h00',
+
+            contenu:
+              'Activité',
+
+            categorie:
+              'autre',
+
+            cellules
+          }
+        ]
+      };
+    });
+  }
+
+  /* =======================================================
+     SUPPRESSION D'UNE LIGNE
+     ======================================================= */
+
+  function supprimerCreneau(index) {
+    setProgramme(prev => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+
+        creneaux:
+          prev.creneaux.filter(
+            (_, i) => i !== index
+          )
+      };
+    });
+  }
+
+  /* =======================================================
+     ENREGISTREMENT SUPABASE
+     ======================================================= */
 
   async function validerProgramme() {
-    if (!programme) {
-      return;
-    }
+    if (!programme) return;
 
     setLoading(true);
     setErrorMsg('');
 
     try {
-
       const creneauxNettoyes =
-        (
-          programme.creneaux ||
-          []
-        ).map(
-          (creneau, index) => {
+        (programme.creneaux || []).map(
+          (cr, i) => {
+            const cellules = {};
+
+            NOMS_JOURS.forEach(
+              (_, index) => {
+                cellules[String(index)] =
+                  cr.cellules?.[
+                    String(index)
+                  ] || '';
+              }
+            );
 
             return {
               id:
-                creneau.id ||
-                `cr_${Date.now()}_${index}`,
+                `cr_${Date.now()}_${i}`,
 
               libelle:
-                creneau.libelle ||
-                HORAIRES_REFERENCE[
-                  index
-                ] ||
+                cr.libelle ||
                 '08h00-10h00',
 
+              /*
+               * On conserve la première
+               * cellule non vide comme
+               * contenu principal.
+               */
+
               contenu:
-                creneau.contenu &&
-                creneau.contenu.trim()
-                  ? creneau.contenu.trim()
-                  : 'Activité',
+                NOMS_JOURS
+                  .map(
+                    (_, index) =>
+                      cellules[
+                        String(index)
+                      ]
+                  )
+                  .find(
+                    texte =>
+                      texte &&
+                      texte.trim()
+                  ) ||
+                'Activité',
 
               categorie:
-                creneau.categorie ||
-                'autre',
+                deviner_categorie(
+                  NOMS_JOURS
+                    .map(
+                      (_, index) =>
+                        cellules[
+                          String(index)
+                        ]
+                    )
+                    .find(
+                      texte =>
+                        texte &&
+                        texte.trim()
+                    ) ||
+                    ''
+                ),
 
-              cellules:
-                creneau.cellules ||
-                {}
+              cellules
             };
           }
         );
 
-      const programmeCree =
+      const prog =
         await base44.entities.Programme.create(
           {
             nom:
@@ -1593,22 +969,17 @@ export default function ScannerOCR({
               'Programme Prépa 1 Géologie-Mines',
 
             description:
-              'Emploi du temps importé par OCR et personnalisé',
+              'Emploi du temps Prépa 1 Géologie-Mines importé et personnalisé cellule par cellule',
 
             couleur_theme:
               '#3498DB',
 
             jours:
               JOURS.map(
-                (jour, index) => ({
-                  id:
-                    String(index),
-
-                  nom:
-                    jour,
-
-                  actif:
-                    true
+                (j, i) => ({
+                  id: String(i),
+                  nom: j,
+                  actif: true
                 })
               ),
 
@@ -1617,46 +988,35 @@ export default function ScannerOCR({
           }
         );
 
-      if (
-        onProgrammeCreated
-      ) {
-        onProgrammeCreated(
-          programmeCree
-        );
+      if (onProgrammeCreated) {
+        onProgrammeCreated(prog);
       }
 
       if (onClose) {
         onClose();
       }
-
-    } catch (error) {
-
+    } catch (err) {
       console.error(
-        'ERREUR ENREGISTREMENT :',
-        error
+        'Erreur détaillée :',
+        err
       );
 
       setErrorMsg(
-        error?.message ||
-        JSON.stringify(
-          error
-        )
+        `Erreur : ${
+          err?.message ||
+          JSON.stringify(err)
+        }`
       );
 
-      setEtape(
-        'erreur'
-      );
-
+      setEtape('erreur');
     } finally {
       setLoading(false);
     }
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | AFFICHAGE
-  |--------------------------------------------------------------------------
-  */
+  /* =======================================================
+     AFFICHAGE
+     ======================================================= */
 
   return (
     <div
@@ -1666,38 +1026,44 @@ export default function ScannerOCR({
           'rgba(0,0,0,0.85)'
       }}
     >
-
       <div
-        className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-border p-4 sm:p-6 animate-fade-in overflow-hidden"
+        className="w-full max-w-7xl max-h-[94vh] flex flex-col rounded-2xl border border-border p-4 sm:p-6 animate-fade-in overflow-hidden"
         style={{
-          background:
-            '#0D0D18'
+          background: '#0D0D18'
         }}
       >
 
-        {/* HEADER */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-        <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
 
           <div className="flex items-center gap-2">
 
             <Camera
-              size={18}
+              size={20}
               style={{
                 color:
                   'var(--gold)'
               }}
             />
 
-            <h2 className="text-base font-black text-foreground">
-              Importation & Édition sur-mesure
-            </h2>
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-foreground">
+                Importation & Édition
+              </h2>
+
+              <p className="text-[11px] sm:text-xs text-muted-foreground">
+                Prépa 1 Géologie–Mines
+              </p>
+            </div>
 
           </div>
 
           <button
             onClick={onClose}
-            type="button"
+            className="p-2 rounded-lg hover:bg-accent"
           >
             <X
               size={20}
@@ -1707,43 +1073,24 @@ export default function ScannerOCR({
 
         </div>
 
-        {/* =====================================================
+        {/* =================================================
             UPLOAD
-        ===================================================== */}
+        ================================================= */}
 
         {etape === 'upload' && (
+          <div className="py-6">
 
-          <div className="py-4">
-
-            <div className="flex items-start gap-3 mb-5">
-
-              <Calendar
-                size={20}
-                style={{
-                  color:
-                    'var(--gold)'
-                }}
-              />
-
-              <div>
-
-                <p className="text-sm font-bold text-foreground">
-                  Importer votre emploi du temps
-                </p>
-
-                <p className="text-xs text-muted-foreground mt-1">
-                  Compatible avec votre tableau Prépa 1 Géologie–Mines : horaires + 7 jours + activités.
-                </p>
-
-              </div>
-
-            </div>
+            <p className="text-sm text-muted-foreground mb-5">
+              Importez votre tableau hebdomadaire.
+              L'application va essayer de reconnaître
+              les horaires et les sept jours.
+            </p>
 
             <div
               onClick={() =>
                 fileRef.current?.click()
               }
-              className="border-2 border-dashed border-border rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-gold transition-colors"
+              className="border-2 border-dashed border-border rounded-2xl p-12 flex flex-col items-center justify-center cursor-pointer hover:border-gold transition-colors"
               style={{
                 background:
                   'var(--accent)'
@@ -1751,16 +1098,18 @@ export default function ScannerOCR({
             >
 
               <Upload
-                size={32}
-                className="text-muted-foreground mb-3"
+                size={38}
+                className="text-muted-foreground mb-4"
               />
 
-              <p className="text-sm font-bold text-foreground text-center">
-                Cliquez pour importer le tableau
+              <p className="text-sm font-bold text-foreground">
+                Cliquez pour importer
+                votre emploi du temps
               </p>
 
-              <p className="text-xs text-muted-foreground mt-1 text-center">
-                Image nette et droite recommandée
+              <p className="text-xs text-muted-foreground mt-2">
+                JPG, PNG ou photo claire
+                du tableau
               </p>
 
             </div>
@@ -1770,9 +1119,9 @@ export default function ScannerOCR({
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={event =>
+              onChange={e =>
                 handleFile(
-                  event.target.files?.[0]
+                  e.target.files?.[0]
                 )
               }
             />
@@ -1780,124 +1129,102 @@ export default function ScannerOCR({
           </div>
         )}
 
-        {/* =====================================================
+        {/* =================================================
             ANALYSE
-        ===================================================== */}
+        ================================================= */}
 
         {etape === 'analyse' && (
-
-          <div className="flex flex-col items-center py-12 text-center">
+          <div className="flex flex-col items-center py-16 text-center">
 
             <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+              className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5"
               style={{
                 background:
                   'var(--gold-dim)'
               }}
             >
-
               <Calendar
-                size={28}
+                size={34}
                 style={{
                   color:
                     'var(--gold)'
                 }}
               />
-
             </div>
 
             <p className="text-base font-black text-foreground mb-2">
-              Lecture de votre tableau…
+              Lecture du tableau…
             </p>
 
-            <p className="text-sm text-muted-foreground mb-4">
-              OCR : {progression}%
+            <p className="text-sm text-muted-foreground">
+              Reconnaissance des horaires
+              et des colonnes
             </p>
 
-            <div className="w-full max-w-xs h-2 rounded-full bg-accent overflow-hidden">
+            <div className="w-full max-w-md mt-6">
 
-              <div
-                className="h-full transition-all"
-                style={{
-                  width:
-                    `${progression}%`,
-                  background:
-                    'var(--gold)'
-                }}
-              />
+              <div className="h-2 rounded-full bg-accent overflow-hidden">
+
+                <div
+                  className="h-full transition-all duration-300"
+                  style={{
+                    width:
+                      `${progression}%`,
+                    background:
+                      'var(--gold)'
+                  }}
+                />
+
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-2">
+                {progression} %
+              </p>
 
             </div>
-
-            <p className="text-xs text-muted-foreground mt-4">
-              Détection des horaires, jours et activités…
-            </p>
 
           </div>
         )}
 
-        {/* =====================================================
+        {/* =================================================
             ERREUR
-        ===================================================== */}
+        ================================================= */}
 
         {etape === 'erreur' && (
-
-          <div className="flex flex-col items-center py-8 text-center">
+          <div className="flex flex-col items-center py-12 text-center">
 
             <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+              className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5"
               style={{
                 background:
                   'rgba(231,76,60,0.15)'
               }}
             >
-
-              <AlertTriangle
-                size={28}
+              <X
+                size={34}
                 style={{
-                  color:
-                    '#E74C3C'
+                  color: '#E74C3C'
                 }}
               />
-
             </div>
 
-            <p className="text-base font-black text-foreground mb-2">
+            <p className="text-lg font-black text-foreground mb-2">
               Le tableau n'a pas pu être importé
             </p>
 
-            <p className="text-sm text-muted-foreground mb-5 break-all">
+            <p className="text-sm text-muted-foreground mb-6 max-w-xl">
               {errorMsg}
             </p>
 
-            {debugOCR && (
-
-              <details
-                className="w-full text-left mb-5"
-              >
-
-                <summary className="text-xs text-muted-foreground cursor-pointer">
-                  Voir le texte reconnu par OCR
-                </summary>
-
-                <pre className="mt-2 p-3 rounded-lg bg-accent text-[10px] leading-relaxed whitespace-pre-wrap max-h-48 overflow-auto">
-                  {debugOCR}
-                </pre>
-
-              </details>
-
-            )}
-
             <button
-              type="button"
               onClick={() =>
                 setEtape('upload')
               }
-              className="w-full py-3 rounded-xl font-black text-sm"
+              className="w-full max-w-md py-3 rounded-xl font-black text-sm"
               style={{
                 background:
                   'var(--gold)',
-                color:
-                  '#080810'
+                color: '#080810'
               }}
             >
               Réessayer
@@ -1906,14 +1233,15 @@ export default function ScannerOCR({
           </div>
         )}
 
-        {/* =====================================================
-            EDITION
-        ===================================================== */}
+        {/* =================================================
+            ÉDITION DU TABLEAU
+        ================================================= */}
 
         {etape === 'edition' &&
           programme && (
-
             <div className="flex flex-col flex-1 overflow-hidden">
+
+              {/* MESSAGE */}
 
               <div className="flex items-center gap-2 mb-3">
 
@@ -1926,193 +1254,271 @@ export default function ScannerOCR({
                 />
 
                 <p className="text-sm font-bold text-foreground">
-                  Tableau détecté — vérifiez les données avant d'enregistrer.
+                  Modifiez directement chaque cellule du tableau.
                 </p>
 
               </div>
 
               {/* NOM */}
 
-              <div className="mb-3">
+              <div className="mb-4">
 
-                <label className="text-xs font-bold tracking-widest text-muted-foreground block mb-1">
+                <label className="text-[11px] font-bold tracking-widest text-muted-foreground block mb-1">
                   NOM DU PROGRAMME
                 </label>
 
                 <input
                   value={
-                    programme.nom ||
-                    ''
+                    programme.nom || ''
                   }
-                  onChange={event =>
+                  onChange={e =>
                     setProgramme(
-                      previous => ({
-                        ...previous,
-                        nom:
-                          event.target.value
+                      p => ({
+                        ...p,
+                        nom: e.target.value
                       })
                     )
                   }
-                  className="w-full bg-accent border border-border rounded-xl px-3 py-2 text-sm text-foreground outline-none focus:border-gold"
+                  className="w-full bg-accent border border-border rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-gold"
                 />
 
               </div>
 
               {/* =================================================
-                  LISTE DES CRÉNEAUX
+                  TABLEAU
               ================================================= */}
 
-              <div
-                className="flex-1 overflow-y-auto border border-border rounded-xl p-2 space-y-3"
-                style={{
-                  background:
-                    'var(--surface)'
-                }}
-              >
+              <div className="flex-1 overflow-auto border border-border rounded-xl">
 
-                {(
-                  programme.creneaux ||
-                  []
-                ).map(
-                  (
-                    creneau,
-                    indexCreneau
-                  ) => (
+                <table
+                  className="w-full border-collapse"
+                  style={{
+                    minWidth:
+                      '1050px'
+                  }}
+                >
 
-                    <div
-                      key={
-                        creneau.id ||
-                        indexCreneau
-                      }
-                      className="p-3 rounded-xl border border-border"
-                      style={{
-                        background:
-                          'var(--accent)'
-                      }}
-                    >
+                  {/* HEADER */}
 
-                      {/* HORAIRE + CONTENU */}
+                  <thead>
 
-                      <div className="flex items-center gap-2 mb-2">
+                    <tr>
 
-                        <Edit3
-                          size={14}
-                          className="text-muted-foreground shrink-0"
-                        />
+                      <th
+                        className="sticky top-0 left-0 z-30 border border-border p-2 text-xs font-black"
+                        style={{
+                          background:
+                            '#164C73',
+                          color:
+                            'white',
+                          width:
+                            '115px'
+                        }}
+                      >
+                        Horaire
+                      </th>
 
-                        <input
-                          value={
-                            creneau.libelle ||
-                            ''
-                          }
-                          onChange={event =>
-                            modifierCreneau(
-                              indexCreneau,
-                              'libelle',
-                              event.target.value
-                            )
-                          }
-                          placeholder="08h00-12h00"
-                          className="bg-surface border border-border rounded-lg px-2 py-1 text-xs font-mono text-foreground w-32 outline-none focus:border-gold"
-                        />
+                      {NOMS_JOURS.map(
+                        (jour, index) => (
+                          <th
+                            key={jour}
+                            className="sticky top-0 z-20 border border-border p-2 text-xs font-black"
+                            style={{
+                              background:
+                                '#164C73',
+                              color:
+                                'white',
+                              minWidth:
+                                '135px'
+                            }}
+                          >
+                            {jour
+                              .charAt(0)
+                              .toUpperCase() +
+                              jour.slice(1)}
+                          </th>
+                        )
+                      )}
 
-                        <input
-                          value={
-                            creneau.contenu ||
-                            ''
-                          }
-                          onChange={event =>
-                            modifierCreneau(
-                              indexCreneau,
-                              'contenu',
-                              event.target.value
-                            )
-                          }
-                          placeholder="Activité principale"
-                          className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-2 py-1 text-xs text-foreground outline-none focus:border-gold"
-                        />
+                    </tr>
 
-                      </div>
+                  </thead>
 
-                      {/* JOURS */}
+                  {/* CORPS */}
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2 pt-2 border-t border-border/50">
+                  <tbody>
 
-                        {JOURS.map(
-                          (
-                            nomJour,
-                            indexJour
-                          ) => (
+                    {(
+                      programme.creneaux ||
+                      []
+                    ).map(
+                      (cr, idx) => (
 
-                            <div
-                              key={
-                                indexJour
+                        <tr
+                          key={idx}
+                        >
+
+                          {/* HORAIRE */}
+
+                          <td
+                            className="sticky left-0 z-10 border border-border p-1"
+                            style={{
+                              background:
+                                '#171725'
+                            }}
+                          >
+
+                            <input
+                              value={
+                                cr.libelle ||
+                                ''
                               }
-                              className="flex flex-col"
-                            >
+                              onChange={e =>
+                                modifierHoraire(
+                                  idx,
+                                  e.target
+                                    .value
+                                )
+                              }
+                              className="w-full h-full min-h-[58px] bg-transparent px-2 py-2 text-[11px] sm:text-xs font-mono font-bold text-foreground outline-none focus:ring-2 focus:ring-[var(--gold)] rounded"
+                              placeholder="08h00-12h00"
+                            />
 
-                              <span className="text-[10px] text-muted-foreground font-semibold">
-                                {nomJour}
-                              </span>
+                          </td>
 
-                              <input
-                                value={
-                                  creneau
-                                    .cellules?.[
-                                    String(
-                                      indexJour
-                                    )
-                                  ] ||
-                                  ''
-                                }
-                                onChange={event =>
-                                  modifierCelluleJour(
-                                    indexCreneau,
-                                    indexJour,
-                                    event.target.value
+                          {/* 7 CELLULES */}
+
+                          {NOMS_JOURS.map(
+                            (_, jourIndex) => {
+
+                              const valeur =
+                                cr
+                                  .cellules?.[
+                                  String(
+                                    jourIndex
                                   )
-                                }
-                                placeholder="—"
-                                className="bg-surface border border-border rounded px-1.5 py-1 text-[11px] text-foreground outline-none focus:border-gold"
-                              />
+                                ] || '';
 
-                            </div>
+                              return (
+                                <td
+                                  key={
+                                    jourIndex
+                                  }
+                                  className="border border-border p-1 align-top"
+                                  style={{
+                                    background:
+                                      idx %
+                                        2 ===
+                                      0
+                                        ? '#11111D'
+                                        : '#151521'
+                                  }}
+                                >
 
-                          )
-                        )}
+                                  <textarea
+                                    value={
+                                      valeur
+                                    }
+                                    onChange={e =>
+                                      modifierCelluleJour(
+                                        idx,
+                                        jourIndex,
+                                        e.target
+                                          .value
+                                      )
+                                    }
+                                    placeholder="Activité…"
+                                    rows={3}
+                                    className="w-full min-h-[70px] resize-y bg-transparent px-2 py-2 text-[11px] sm:text-xs text-foreground outline-none rounded focus:ring-2 focus:ring-[var(--gold)] placeholder:text-muted-foreground"
+                                  />
 
-                      </div>
+                                </td>
+                              );
+                            }
+                          )}
 
-                    </div>
+                        </tr>
 
-                  )
+                      )
+                    )}
+
+                  </tbody>
+
+                </table>
+
+                {/* AUCUNE LIGNE */}
+
+                {programme.creneaux
+                  ?.length === 0 && (
+                  <div className="p-8 text-center">
+
+                    <p className="text-sm text-muted-foreground">
+                      Aucun créneau détecté.
+                    </p>
+
+                  </div>
                 )}
 
               </div>
 
-              {/* BOUTONS */}
+              {/* =================================================
+                  ACTIONS DU TABLEAU
+              ================================================= */}
 
-              <div className="flex gap-2 mt-4 pt-2 border-t border-border">
+              <div className="flex flex-wrap gap-2 mt-3">
 
                 <button
-                  type="button"
-                  onClick={() =>
-                    setEtape(
-                      'upload'
-                    )
+                  onClick={
+                    ajouterCreneau
                   }
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold border border-border text-muted-foreground"
+                  className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-foreground hover:bg-accent"
                 >
+                  ＋ Ajouter une ligne
+                </button>
+
+                {programme.creneaux
+                  ?.length > 0 && (
+                  <button
+                    onClick={() =>
+                      supprimerCreneau(
+                        programme
+                          .creneaux
+                          .length - 1
+                      )
+                    }
+                    className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-accent"
+                  >
+                    − Supprimer la dernière ligne
+                  </button>
+                )}
+
+              </div>
+
+              {/* =================================================
+                  BOUTONS FINAUX
+              ================================================= */}
+
+              <div className="flex gap-2 mt-4 pt-3 border-t border-border">
+
+                <button
+                  onClick={() =>
+                    setEtape('upload')
+                  }
+                  className="flex-1 py-3 rounded-xl text-sm font-bold border border-border text-muted-foreground hover:bg-accent flex items-center justify-center gap-2"
+                >
+                  <RotateCcw
+                    size={15}
+                  />
+
                   Recommencer
                 </button>
 
                 <button
-                  type="button"
                   onClick={
                     validerProgramme
                   }
                   disabled={loading}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-black disabled:opacity-50"
+                  className="flex-1 py-3 rounded-xl text-sm font-black disabled:opacity-50 flex items-center justify-center gap-2"
                   style={{
                     background:
                       'var(--gold)',
@@ -2122,12 +1528,22 @@ export default function ScannerOCR({
                 >
 
                   {loading ? (
-                    <Loader2
-                      size={16}
-                      className="animate-spin mx-auto"
-                    />
+                    <>
+                      <Loader2
+                        size={17}
+                        className="animate-spin"
+                      />
+
+                      Enregistrement…
+                    </>
                   ) : (
-                    '✅ Enregistrer le programme'
+                    <>
+                      <CheckCircle2
+                        size={17}
+                      />
+
+                      Enregistrer le programme
+                    </>
                   )}
 
                 </button>
