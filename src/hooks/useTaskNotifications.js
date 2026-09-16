@@ -1,50 +1,22 @@
 import { useEffect, useRef } from 'react';
 import { base44 } from '@/api/supabaseClient';
 
-const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
-
-// Catégories considérées comme "repas" → alerte spéciale dîner/déjeuner
-const REPAS_CAT = ['repas'];
-const REPAS_KEYWORDS = ['dîner', 'diner', 'déjeuner', 'dejeuner', 'petit-déjeuner', 'souper', 'manger', 'iftar', 'suhoor'];
-
-function isRepas(tache) {
-  if (REPAS_CAT.includes(tache.categorie)) return true;
-  const titre = (tache.titre || '').toLowerCase();
-  return REPAS_KEYWORDS.some(k => titre.includes(k));
-}
-
-// ── SYSTÈME À DEUX NIVEAUX ──────────────────────────────────────────
-// ALARMES : réveil, sommeil, tâches critiques/priorité haute
-//   → son fort et persistant, notification non-fermable, vibration longue
-// NOTIFICATIONS : repas, activités quotidiennes, habitudes
-//   → son doux, notification auto-fermable, vibration courte
-const ALARME_CAT = ['sommeil'];
-const ALARME_KEYWORDS = ['réveil', 'reveille', 'wake', 'lever', 'matin', 'fajr', 'prière du matin', 'priere du matin'];
-
-function isAlarme(tache) {
-  if (ALARME_CAT.includes(tache.categorie)) return true;
-  if (tache.priorite === 'haute') return true;
-  const titre = (tache.titre || '').toLowerCase();
-  return ALARME_KEYWORDS.some(k => titre.includes(k));
-}
-
-// Préférences de notifications (stockées en localStorage)
-function getPrefs() {
-  try {
-    return JSON.parse(localStorage.getItem('notif-prefs') || '{}');
-  } catch { return {}; }
-}
-
-export function saveNotifPrefs(prefs) {
-  localStorage.setItem('notif-prefs', JSON.stringify(prefs));
-}
+export const JOURS = [
+  'Lundi',
+  'Mardi',
+  'Mercredi',
+  'Jeudi',
+  'Vendredi',
+  'Samedi',
+  'Dimanche'
+];
 
 export const DEFAULT_PREFS = {
-  rappel_avant: 10,        // minutes avant tâche (rappel configurable)
-  rappel_30min: true,      // rappel 30 min avant
-  rappel_15min: true,      // rappel 15 min avant
-  rappel_5min: true,       // rappel 5 min avant (urgent)
-  rappel_exact: true,      // alerte à l'heure exacte
+  rappel_avant: 10,
+  rappel_30min: true,
+  rappel_15min: true,
+  rappel_5min: true,
+  rappel_exact: true,
   rappel_programme: true,
   bilan_midi: true,
   bilan_soir: true,
@@ -52,554 +24,1043 @@ export const DEFAULT_PREFS = {
   heure_bilan_soir: 18,
 };
 
-function parseHeureMin(heure) {
-  if (!heure) return null;
-  const matchH = heure.match(/(\d+)h(\d*)/);
-  if (matchH) return parseInt(matchH[1]) * 60 + (parseInt(matchH[2] || '0'));
-  const matchColon = heure.match(/(\d+):(\d+)/);
-  if (matchColon) return parseInt(matchColon[1]) * 60 + parseInt(matchColon[2]);
-  const matchNum = heure.match(/^(\d+)$/);
-  if (matchNum) return parseInt(matchNum[1]) * 60;
+const REPAS_CAT = [
+  'repas',
+  'alimentation',
+  'déjeuner',
+  'dîner',
+  'petit-déjeuner',
+];
+
+const REPAS_KEYWORDS = [
+  'manger',
+  'repas',
+  'déjeuner',
+  'diner',
+  'dîner',
+  'petit déjeuner',
+  'petit-déjeuner',
+  'déjeuner',
+];
+
+const ALARME_CAT = [
+  'alarme',
+  'urgent',
+  'urgence',
+  'important',
+];
+
+const ALARME_KEYWORDS = [
+  'alarme',
+  'urgent',
+  'urgence',
+  'réveil',
+  'reveil',
+];
+
+function getPrefs() {
+  try {
+    const saved = localStorage.getItem('notif-prefs');
+
+    if (!saved) {
+      return { ...DEFAULT_PREFS };
+    }
+
+    return {
+      ...DEFAULT_PREFS,
+      ...JSON.parse(saved),
+    };
+  } catch {
+    return { ...DEFAULT_PREFS };
+  }
+}
+
+export function saveNotifPrefs(prefs) {
+  try {
+    localStorage.setItem(
+      'notif-prefs',
+      JSON.stringify({
+        ...DEFAULT_PREFS,
+        ...prefs,
+      })
+    );
+  } catch {
+    // Rien à faire si localStorage n'est pas disponible
+  }
+}
+
+function parseHeureMin(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    const h = Math.floor(value);
+    const m = Math.round((value - h) * 60);
+
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      return h * 60 + m;
+    }
+
+    return null;
+  }
+
+  const str = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s/g, '');
+
+  let match = str.match(/^(\d{1,2})h(\d{1,2})?$/);
+
+  if (match) {
+    const h = Number(match[1]);
+    const m = Number(match[2] || 0);
+
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      return h * 60 + m;
+    }
+
+    return null;
+  }
+
+  match = str.match(/^(\d{1,2}):(\d{1,2})$/);
+
+  if (match) {
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      return h * 60 + m;
+    }
+
+    return null;
+  }
+
+  if (/^\d{1,2}$/.test(str)) {
+    const h = Number(str);
+
+    if (h >= 0 && h <= 23) {
+      return h * 60;
+    }
+  }
+
   return null;
 }
 
-// Sons distincts par contexte
-function playAlarm(type = 'normal') {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+function localISODate(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
 
-    if (type === 'repas') {
-      // Son chaleureux "c'est l'heure de manger" — 3 notes montantes douces
-      [[0, 523], [0.2, 659], [0.4, 784]].forEach(([delay, freq]) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
-        gain.gain.setValueAtTime(0.22, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.5);
-        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.5);
-      });
-    } else if (type === 'success') {
-      [0, 0.18].forEach((delay, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(i === 0 ? 660 : 880, ctx.currentTime + delay);
-        gain.gain.setValueAtTime(0.2, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.3);
-        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.3);
-      });
-    } else if (type === 'urgent') {
-      // 4 bips descendants rapides
-      [0, 0.12, 0.24, 0.36].forEach(delay => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(440, ctx.currentTime + delay);
-        osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + delay + 0.1);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
-        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.1);
-      });
-    } else if (type === 'warning') {
-      // 2 bips courts — alerte douce (5min avant)
-      [0, 0.25].forEach(delay => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(700, ctx.currentTime + delay);
-        gain.gain.setValueAtTime(0.2, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.18);
-        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.18);
-      });
-    } else if (type === 'alarm') {
-      // ALARME FORTE — 3 cycles de bips aigus stridents (réveil, critique)
-      for (let rep = 0; rep < 3; rep++) {
-        const baseDelay = rep * 0.7;
-        [0, 0.15, 0.3].forEach(delay => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'square';
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.frequency.setValueAtTime(960, ctx.currentTime + baseDelay + delay);
-          gain.gain.setValueAtTime(0.35, ctx.currentTime + baseDelay + delay);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + baseDelay + delay + 0.13);
-          osc.start(ctx.currentTime + baseDelay + delay);
-          osc.stop(ctx.currentTime + baseDelay + delay + 0.13);
-        });
-      }
-    } else {
-      // normal
-      [0, 0.15, 0.3].forEach(delay => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.setValueAtTime(880, ctx.currentTime + delay);
-        osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + delay + 0.12);
-        gain.gain.setValueAtTime(0.25, ctx.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.35);
-        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.35);
-      });
-    }
-  } catch (e) {}
+  return `${y}-${m}-${d}`;
 }
 
-function sendNotification(titre, body, emoji = '🔔', soundType = 'normal') {
-  const isAlarm = soundType === 'alarm' || soundType === 'urgent';
+function getDayName(date = new Date()) {
+  const index = date.getDay();
 
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(`${isAlarm ? '🚨 ALARME' : emoji} ${titre}`, {
-      body: isAlarm ? `⚠️ ${body}` : body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      tag: `coach-${titre.slice(0, 20)}-${Date.now()}`,
-      requireInteraction: isAlarm,
-    });
+  // JavaScript : dimanche = 0
+  if (index === 0) return 'Dimanche';
+
+  return JOURS[index - 1];
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isRepas(item) {
+  const category = normalizeText(
+    item?.categorie || item?.category || item?.type || ''
+  );
+
+  const title = normalizeText(
+    item?.titre ||
+    item?.title ||
+    item?.nom ||
+    item?.texte ||
+    item?.description ||
+    ''
+  );
+
+  return (
+    REPAS_CAT.some((x) => category.includes(normalizeText(x))) ||
+    REPAS_KEYWORDS.some((x) => title.includes(normalizeText(x)))
+  );
+}
+
+function isAlarme(item) {
+  const category = normalizeText(
+    item?.categorie || item?.category || item?.type || ''
+  );
+
+  const title = normalizeText(
+    item?.titre ||
+    item?.title ||
+    item?.nom ||
+    item?.texte ||
+    item?.description ||
+    ''
+  );
+
+  return (
+    ALARME_CAT.some((x) => category.includes(normalizeText(x))) ||
+    ALARME_KEYWORDS.some((x) => title.includes(normalizeText(x)))
+  );
+}
+
+function getItemTitle(item) {
+  return (
+    item?.titre ||
+    item?.title ||
+    item?.nom ||
+    item?.texte ||
+    item?.description ||
+    'Tâche'
+  );
+}
+
+function getItemTime(item) {
+  return (
+    item?.heure ||
+    item?.time ||
+    item?.heure_debut ||
+    item?.start_time ||
+    item?.debut ||
+    null
+  );
+}
+
+function getItemDay(item) {
+  return (
+    item?.jour ||
+    item?.day ||
+    item?.date_jour ||
+    null
+  );
+}
+
+function getItemId(item, fallback = 'item') {
+  return (
+    item?.id ||
+    item?._id ||
+    item?.uuid ||
+    `${fallback}-${getItemTitle(item)}-${getItemTime(item)}`
+  );
+}
+
+function playAlarm(type = 'normal') {
+  try {
+    if (navigator.vibrate) {
+      if (type === 'urgent' || type === 'alarm') {
+        navigator.vibrate([400, 150, 400, 150, 600]);
+      } else if (type === 'warning') {
+        navigator.vibrate([300, 150, 300]);
+      } else {
+        navigator.vibrate([200, 100, 200]);
+      }
+    }
+  } catch {
+    // Vibration non disponible
   }
-  playAlarm(soundType);
-  if (soundType === 'alarm') {
-    navigator.vibrate?.([500, 200, 500, 200, 500, 200, 500]);
-  } else if (soundType === 'urgent') {
-    navigator.vibrate?.([300, 100, 300, 100, 300]);
-  } else if (soundType === 'repas') {
-    navigator.vibrate?.([200, 80, 200, 80, 400]);
-  } else {
-    navigator.vibrate?.([200, 100, 200]);
+
+  try {
+    const AudioContext =
+      window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContext) return;
+
+    const ctx = new AudioContext();
+
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+
+    let frequency = 700;
+
+    if (type === 'urgent' || type === 'alarm') {
+      frequency = 950;
+    } else if (type === 'warning') {
+      frequency = 800;
+    } else if (type === 'repas') {
+      frequency = 600;
+    } else if (type === 'success') {
+      frequency = 1000;
+    }
+
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+
+    gain.gain.setValueAtTime(0.001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+      0.25,
+      ctx.currentTime + 0.02
+    );
+
+    oscillator.start();
+
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      ctx.currentTime + 0.45
+    );
+
+    oscillator.stop(ctx.currentTime + 0.5);
+
+    setTimeout(() => {
+      try {
+        ctx.close();
+      } catch {
+        // Rien
+      }
+    }, 700);
+  } catch {
+    // Audio non disponible ou bloqué
+  }
+}
+
+async function sendNotification(
+  title,
+  body,
+  options = {}
+) {
+  if (
+    typeof window === 'undefined' ||
+    !('Notification' in window)
+  ) {
+    return;
+  }
+
+  if (Notification.permission !== 'granted') {
+    return;
+  }
+
+  const {
+    alarmType = 'normal',
+    requireInteraction = false,
+    tag,
+    icon = '/favicon.ico',
+  } = options;
+
+  const notificationOptions = {
+    body,
+    icon,
+    badge: icon,
+    requireInteraction,
+    tag,
+    renotify: true,
+  };
+
+  try {
+    /*
+     * Sur mobile, le Service Worker est souvent plus fiable
+     * que new Notification().
+     */
+    if ('serviceWorker' in navigator) {
+      try {
+        const registration =
+          await navigator.serviceWorker.ready;
+
+        if (registration?.showNotification) {
+          await registration.showNotification(
+            title,
+            notificationOptions
+          );
+
+          playAlarm(alarmType);
+          return;
+        }
+      } catch {
+        // On passe au fallback
+      }
+    }
+
+    const notification = new Notification(
+      title,
+      notificationOptions
+    );
+
+    notification.onclick = () => {
+      try {
+        window.focus();
+        notification.close();
+      } catch {
+        // Rien
+      }
+    };
+
+    playAlarm(alarmType);
+  } catch {
+    // Notification bloquée
+  }
+}
+
+function saveOfflineData(data) {
+  try {
+    localStorage.setItem(
+      'coach-offline-data',
+      JSON.stringify({
+        ...data,
+        savedAt: Date.now(),
+      })
+    );
+  } catch {
+    // localStorage indisponible
+  }
+}
+
+function getOfflineData() {
+  try {
+    const raw = localStorage.getItem(
+      'coach-offline-data'
+    );
+
+    if (!raw) return null;
+
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function syncServiceWorker(payload) {
+  if (
+    typeof navigator === 'undefined' ||
+    !('serviceWorker' in navigator)
+  ) {
+    return;
+  }
+
+  try {
+    const registration =
+      await navigator.serviceWorker.ready;
+
+    const worker =
+      navigator.serviceWorker.controller ||
+      registration.active;
+
+    if (!worker) return;
+
+    worker.postMessage({
+      type: 'SYNC_DATA',
+      payload,
+    });
+  } catch (error) {
+    console.warn(
+      'Synchronisation Service Worker impossible :',
+      error
+    );
   }
 }
 
 export default function useTaskNotifications() {
   const notifiedRef = useRef(new Set());
+  const intervalRef = useRef(null);
+  const runningRef = useRef(false);
 
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-
-    // Register periodic sync for background notifications (Chrome/Android)
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(reg => {
-        if ('periodicSync' in reg) {
-          reg.periodicSync.register('task-check', { minInterval: 12 * 60 * 60 * 1000 }).catch(() => {});
-        }
-      }).catch(() => {});
-    }
-
-    // Check immediately when user returns to the app
-    function onVisible() {
-      if (document.visibilityState === 'visible') checkAll();
-    }
-    document.addEventListener('visibilitychange', onVisible);
+    let cancelled = false;
 
     async function checkAll() {
-      const prefs = { ...DEFAULT_PREFS, ...getPrefs() };
-      const now = new Date();
-      const todayIndex = now.getDay() === 0 ? 6 : now.getDay() - 1;
-      const todayName = JOURS[todayIndex];
-      const todayISO = now.toISOString().slice(0, 10);
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      const minuteKey = now.toISOString().slice(0, 16);
+      if (cancelled || runningRef.current) {
+        return;
+      }
 
-      let taches = [], programmes = [], habitudes = [], notes = [], rappels = [];
-      let isOffline = false;
+      runningRef.current = true;
+
       try {
-        [taches, programmes, habitudes, notes, rappels] = await Promise.all([
-          base44.entities.Tache.list('-created_date', 200),
-          base44.entities.Programme.list('-created_date', 20),
-          base44.entities.Habitude.list('-created_date', 100),
-          base44.entities.NoteCalendrier.list('-date', 200),
-          base44.entities.Rappel.list('-created_date', 100),
-        ]);
-        // Cache local hors-ligne — écriture uniquement si les données ont changé (évite 4 JSON.stringify + 4 writes toutes les 30s)
-        const sig = `${taches.length}:${taches[0]?.updated_date || ''}|${programmes.length}:${programmes[0]?.updated_date || ''}|${habitudes.length}:${habitudes[0]?.updated_date || ''}|${notes.length}:${notes[0]?.updated_date || ''}|${rappels.length}:${rappels[0]?.updated_date || ''}`;
-        if (localStorage.getItem('cache-sig') !== sig) {
-          localStorage.setItem('cache-taches', JSON.stringify(taches));
-          localStorage.setItem('cache-programmes', JSON.stringify(programmes));
-          localStorage.setItem('cache-habitudes', JSON.stringify(habitudes));
-          localStorage.setItem('cache-notes', JSON.stringify(notes));
-          localStorage.setItem('cache-rappels', JSON.stringify(rappels));
-          localStorage.setItem('cache-sig', sig);
-        }
-        localStorage.setItem('cache-last-sync', new Date().toISOString());
-      } catch (e) {
-        // Mode hors-ligne : utiliser les données en cache
-        isOffline = true;
+        const now = new Date();
+
+        const todayName = getDayName(now);
+        const todayISO = localISODate(now);
+
+        const currentMinutes =
+          now.getHours() * 60 + now.getMinutes();
+
+        let taches = [];
+        let programmes = [];
+        let habitudes = [];
+        let notes = [];
+        let rappels = [];
+
         try {
-          taches = JSON.parse(localStorage.getItem('cache-taches') || '[]');
-          programmes = JSON.parse(localStorage.getItem('cache-programmes') || '[]');
-          habitudes = JSON.parse(localStorage.getItem('cache-habitudes') || '[]');
-          notes = JSON.parse(localStorage.getItem('cache-notes') || '[]');
-          rappels = JSON.parse(localStorage.getItem('cache-rappels') || '[]');
-        } catch {}
-      }
+          const results = await Promise.all([
+            base44.entities.Tache.list(
+              '-created_date',
+              200
+            ),
+            base44.entities.Programme.list(
+              '-created_date',
+              20
+            ),
+            base44.entities.Habitude.list(
+              '-created_date',
+              100
+            ),
+            base44.entities.NoteCalendrier.list(
+              '-date',
+              200
+            ),
+            base44.entities.Rappel.list(
+              '-created_date',
+              100
+            ),
+          ]);
 
-      // Sync today's data to Service Worker for background notifications
-      if (navigator.serviceWorker?.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'SYNC_DATA',
-          payload: {
-            tasks: taches.filter(t => t.jour === todayName || t.jour === todayISO),
-            notes: notes.filter(n => n.date === todayISO),
-            prefs: { ...DEFAULT_PREFS, ...getPrefs() },
-          },
+          taches = results[0] || [];
+          programmes = results[1] || [];
+          habitudes = results[2] || [];
+          notes = results[3] || [];
+          rappels = results[4] || [];
+
+          saveOfflineData({
+            taches,
+            programmes,
+            habitudes,
+            notes,
+            rappels,
+          });
+        } catch (error) {
+          console.warn(
+            'Chargement en ligne impossible, utilisation du cache.',
+            error
+          );
+
+          const offline = getOfflineData();
+
+          if (offline) {
+            taches = offline.taches || [];
+            programmes = offline.programmes || [];
+            habitudes = offline.habitudes || [];
+            notes = offline.notes || [];
+            rappels = offline.rappels || [];
+          }
+        }
+
+        if (cancelled) return;
+
+        const prefs = {
+          ...DEFAULT_PREFS,
+          ...getPrefs(),
+        };
+
+        /*
+         * Seules les tâches du jour sont envoyées au Service Worker.
+         */
+        const tasksToday = taches.filter((task) => {
+          if (task.faite === true) return false;
+
+          const day = getItemDay(task);
+
+          if (!day) return true;
+
+          return (
+            day === todayName ||
+            day === todayISO
+          );
         });
-      }
 
-      const tachesAujourd = taches.filter(t => t.jour === todayName || t.jour === todayISO);
-      const tachesFaites = tachesAujourd.filter(t => t.faite);
-      const tachesNonFaites = tachesAujourd.filter(t => !t.faite);
-      const total = tachesAujourd.length;
-      const pct = total > 0 ? Math.round((tachesFaites.length / total) * 100) : 0;
+        const notesToday = notes.filter((note) => {
+          return (
+            note.date === todayISO &&
+            note.faite !== true
+          );
+        });
 
-      // ── 1. RAPPELS TÂCHES (multi-paliers) ───────────────────────────────
+        await syncServiceWorker({
+          tasks: tasksToday,
+          notes: notesToday,
+          prefs,
+        });
 
-      for (const tache of tachesNonFaites) {
-        const heureMin = parseHeureMin(tache.heure);
-        if (heureMin === null) continue;
-        const diff = heureMin - nowMin;
-        const repas = isRepas(tache);
-        const haute = tache.priorite === 'haute';
+        /*
+         * ------------------------------------------
+         * TÂCHES
+         * ------------------------------------------
+         */
+        for (const task of tasksToday) {
+          const time = getItemTime(task);
+          const taskMin = parseHeureMin(time);
 
-        // ─ 30 min avant (toutes tâches)
-        if (prefs.rappel_30min) {
-          const key30 = `avant30-${tache.id}-${minuteKey}`;
-          if (diff >= 29 && diff <= 31 && !notifiedRef.current.has(key30)) {
-            notifiedRef.current.add(key30);
-            sendNotification(
-              tache.titre,
-              repas
-                ? `🍽️ Ton repas dans 30 min — prépare la table !`
-                : `Dans 30 min${haute ? ' · ⚡ PRIORITÉ HAUTE' : ''} — pense à t'organiser`,
-              repas ? '🍽️' : '⏰',
-              'normal'
-            );
-          }
-        }
+          if (taskMin === null) continue;
 
-        // ─ 15 min avant (toutes tâches)
-        if (prefs.rappel_15min) {
-          const key15 = `avant15-${tache.id}-${minuteKey}`;
-          if (diff >= 14 && diff <= 16 && !notifiedRef.current.has(key15)) {
-            notifiedRef.current.add(key15);
-            sendNotification(
-              tache.titre,
-              repas
-                ? `🍽️ Dans 15 min — c'est presque l'heure de manger !`
-                : `Dans 15 min${haute ? ' · ⚡ HAUTE PRIORITÉ' : ''} — prépare-toi !`,
-              repas ? '🍴' : '⏰',
-              repas ? 'repas' : 'normal'
-            );
-          }
-        }
+          const diff = taskMin - currentMinutes;
 
-        // ─ 5 min avant → son warning (notifications) ou urgent (alarmes)
-        if (prefs.rappel_5min) {
-          const key5 = `avant5-${tache.id}-${minuteKey}`;
-          if (diff >= 4 && diff <= 6 && !notifiedRef.current.has(key5)) {
-            notifiedRef.current.add(key5);
-            const alarme = isAlarme(tache);
-            sendNotification(
-              tache.titre,
-              repas
-                ? `🍽️ 5 min ! C'est bientôt l'heure de passer à table 🥘`
-                : alarme
-                  ? `⚡ ALARME dans 5 min — prépare-toi immédiatement !`
-                  : `⚡ Dans 5 min — c'est imminent !`,
-              repas ? '🥘' : '⚡',
-              alarme ? 'urgent' : repas ? 'repas' : 'warning'
-            );
-          }
-        }
+          const id = getItemId(task, 'task');
+          const title = getItemTitle(task);
 
-        // ─ Rappel configurable (ex: 10 min) si différent des paliers standards
-        const avant = prefs.rappel_avant || 10;
-        if (![5, 15, 30].includes(avant)) {
-          const keyAvant = `avant${avant}-${tache.id}-${minuteKey}`;
-          if (diff >= avant - 1 && diff <= avant + 1 && !notifiedRef.current.has(keyAvant)) {
-            notifiedRef.current.add(keyAvant);
-            sendNotification(
-              tache.titre,
-              `Dans ${avant} min${haute ? ' · ⚡ PRIORITÉ HAUTE' : ''} — prépare-toi !`,
-              '⏰', 'normal'
-            );
-          }
-        }
+          const baseKey = `${todayISO}-${id}-${taskMin}`;
 
-        // ─ Alerte à l'heure exacte : ALARME (critique/réveil) ou NOTIFICATION (normal)
-        if (prefs.rappel_exact) {
-          const keyExact = `exact-${tache.id}-${minuteKey}`;
-          if (diff >= 0 && diff <= 1 && !notifiedRef.current.has(keyExact)) {
-            notifiedRef.current.add(keyExact);
-            const alarme = isAlarme(tache);
-            sendNotification(
-              tache.titre,
-              repas
-                ? `🍽️ C'est l'heure du repas ! Bon appétit 😋`
-                : alarme
-                  ? `🚨 C'est l'heure ! ALARME — agis maintenant !`
-                  : `🔔 C'est l'heure — à toi de jouer !`,
-              repas ? '🍽️' : alarme ? '🚨' : '🔔',
-              alarme ? 'alarm' : repas ? 'repas' : 'normal'
-            );
-          }
-        }
+          /*
+           * Rappel personnalisé.
+           *
+           * Si la valeur est 5, 15 ou 30,
+           * ces rappels sont déjà gérés par les options
+           * correspondantes.
+           */
+          if (
+            prefs.rappel_avant > 0 &&
+            ![5, 15, 30].includes(
+              Number(prefs.rappel_avant)
+            ) &&
+            diff === Number(prefs.rappel_avant)
+          ) {
+            const key = `custom-${baseKey}`;
 
-        // ─ Tâche en retard 15 min
-        if (prefs.retard_alerte) {
-          const keyRetard = `retard-15-${tache.id}-${minuteKey}`;
-          if (diff <= -14 && diff >= -16 && !notifiedRef.current.has(keyRetard)) {
-            notifiedRef.current.add(keyRetard);
-            sendNotification(
-              `En retard : ${tache.titre}`,
-              repas
-                ? `Tu n'as toujours pas mangé 😬 Prévu à ${tache.heure} — prends soin de toi !`
-                : `Prévu à ${tache.heure}, pas encore fait — rattrape-toi ! 😤`,
-              '🚨', 'urgent'
-            );
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '⏰ Rappel',
+                `${title} commence dans ${prefs.rappel_avant} min.`,
+                {
+                  alarmType: 'warning',
+                  tag: key,
+                }
+              );
+            }
           }
 
-          // 2ème alerte retard 60 min (haute priorité uniquement)
-          if (haute) {
-            const keyRetard60 = `retard-60-${tache.id}-${minuteKey}`;
-            if (diff <= -59 && diff >= -61 && !notifiedRef.current.has(keyRetard60)) {
-              notifiedRef.current.add(keyRetard60);
-              sendNotification(
-                `⚠️ Toujours en retard : ${tache.titre}`,
-                `Cette tâche prioritaire n'est toujours pas faite. Agis maintenant !`,
-                '🚨', 'urgent'
+          /*
+           * 30 minutes
+           */
+          if (
+            prefs.rappel_30min &&
+            diff === 30
+          ) {
+            const key = `30-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '⏳ Dans 30 minutes',
+                title,
+                {
+                  alarmType: 'warning',
+                  tag: key,
+                }
+              );
+            }
+          }
+
+          /*
+           * 15 minutes
+           */
+          if (
+            prefs.rappel_15min &&
+            diff === 15
+          ) {
+            const key = `15-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '⏳ Dans 15 minutes',
+                title,
+                {
+                  alarmType: 'warning',
+                  tag: key,
+                }
+              );
+            }
+          }
+
+          /*
+           * 5 minutes
+           */
+          if (
+            prefs.rappel_5min &&
+            diff === 5
+          ) {
+            const key = `5-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '🚨 Dans 5 minutes',
+                title,
+                {
+                  alarmType: 'urgent',
+                  requireInteraction: true,
+                  tag: key,
+                }
+              );
+            }
+          }
+
+          /*
+           * Heure exacte
+           */
+          if (
+            prefs.rappel_exact &&
+            diff === 0
+          ) {
+            const key = `exact-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              const alarm =
+                isAlarme(task)
+                  ? 'alarm'
+                  : isRepas(task)
+                    ? 'repas'
+                    : 'normal';
+
+              await sendNotification(
+                isRepas(task)
+                  ? '🍽️ C’est l’heure du repas'
+                  : isAlarme(task)
+                    ? '🚨 ALARME'
+                    : '🔔 C’est l’heure',
+                title,
+                {
+                  alarmType: alarm,
+                  requireInteraction:
+                    isAlarme(task),
+                  tag: key,
+                }
+              );
+            }
+          }
+
+          /*
+           * Retard de 15 minutes
+           */
+          if (
+            prefs.retard_alerte &&
+            diff === -15
+          ) {
+            const key = `late15-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '⚠️ Tâche en retard',
+                `${title} devait commencer il y a 15 minutes.`,
+                {
+                  alarmType: 'warning',
+                  tag: key,
+                }
+              );
+            }
+          }
+
+          /*
+           * Retard important : 60 minutes
+           */
+          if (
+            prefs.retard_alerte &&
+            diff === -60 &&
+            (task.priorite === 'haute' ||
+              task.priorite === 'urgent' ||
+              isAlarme(task))
+          ) {
+            const key = `late60-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '🚨 Retard important',
+                `${title} est en retard depuis 1 heure.`,
+                {
+                  alarmType: 'urgent',
+                  requireInteraction: true,
+                  tag: key,
+                }
               );
             }
           }
         }
-      }
 
-      // ── 2. BILAN MIDI ────────────────────────────────────────────────
+        /*
+         * ------------------------------------------
+         * NOTES CALENDRIER
+         * ------------------------------------------
+         */
+        for (const note of notesToday) {
+          const time = getItemTime(note);
+          const noteMin = parseHeureMin(time);
 
-      if (prefs.bilan_midi && total > 0) {
-        const keyMidi = `midi-${todayISO}`;
-        if (nowMin >= 12 * 60 && nowMin < 12 * 60 + 3 && !notifiedRef.current.has(keyMidi)) {
-          notifiedRef.current.add(keyMidi);
-          const retardeesMatin = tachesNonFaites.filter(t => {
-            const h = parseHeureMin(t.heure);
-            return h !== null && h < 12 * 60;
-          });
-          if (retardeesMatin.length > 0) {
-            sendNotification('Bilan du matin',
-              `${retardeesMatin.length} tâche(s) manquée(s) ce matin. Rattrape-toi cet après-midi ! 💪`,
-              '📊', 'urgent');
-          } else if (pct >= 50) {
-            sendNotification('Bilan du matin',
-              `${pct}% accompli — excellent rythme ! Continue cet après-midi 🔥`,
-              '🌟', 'success');
-          } else {
-            sendNotification('Bilan du matin',
-              `${tachesFaites.length}/${total} tâches faites. Accélère l'allure ! ⚡`,
-              '📊', 'normal');
-          }
-        }
-      }
+          if (noteMin === null) continue;
 
-      // ── 3. BILAN DU SOIR ─────────────────────────────────────────────
+          const diff = noteMin - currentMinutes;
 
-      if (prefs.bilan_soir && total > 0) {
-        const heureSoir = (prefs.heure_bilan_soir || 18) * 60;
-        const keySoir = `soir-${todayISO}`;
-        if (nowMin >= heureSoir && nowMin < heureSoir + 3 && !notifiedRef.current.has(keySoir)) {
-          notifiedRef.current.add(keySoir);
-          const retardees = tachesNonFaites.filter(t => {
-            const h = parseHeureMin(t.heure);
-            return h !== null && h < nowMin;
-          });
-          if (pct === 100) {
-            sendNotification('🏆 Journée parfaite !',
-              `Toutes tes tâches accomplies ! Tu es un champion 👑`,
-              '🏆', 'success');
-          } else if (retardees.length > 0) {
-            sendNotification(`${retardees.length} tâche(s) en retard`,
-              `"${retardees[0].titre}"${retardees.length > 1 ? ` +${retardees.length - 1} autre(s)` : ''} — encore du temps ! 🚀`,
-              '🚨', 'urgent');
-          } else {
-            sendNotification('Bilan du soir',
-              `${tachesFaites.length}/${total} tâches (${pct}%) — fais le bilan dans l'app ! ⚡`,
-              '🌅', 'normal');
-          }
-        }
-      }
+          const id = getItemId(note, 'note');
+          const title = getItemTitle(note);
 
-      // ── 4. OBJECTIF 100% AVANT 17H ───────────────────────────────────
+          const baseKey = `${todayISO}-${id}-${noteMin}`;
 
-      if (total > 0) {
-        const keyAllDone = `all-done-${todayISO}`;
-        if (pct === 100 && nowMin < 17 * 60 && !notifiedRef.current.has(keyAllDone)) {
-          notifiedRef.current.add(keyAllDone);
-          sendNotification('Objectif du jour accompli !',
-            `Toutes tes tâches avant 17h ! 🎉 Tu mérites du repos.`,
-            '🏆', 'success');
-        }
-      }
+          if (
+            diff === 15 &&
+            note.notifie !== true
+          ) {
+            const key = `note15-${baseKey}`;
 
-      // ── 5. RAPPELS HABITUDES ─────────────────────────────────────────
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
 
-      const habitudesActives = habitudes.filter(h => !h.archivee);
-      const HABITUDE_RAPPEL_HEURE = {
-        sport: 7 * 60, sante: 8 * 60, etude: 9 * 60,
-        spiritual: 6 * 60, social: 18 * 60, autre: 8 * 60,
-      };
-      for (const hab of habitudesActives) {
-        const completions = hab.completions || [];
-        if (completions.includes(todayISO)) continue;
-        const heureRappel = HABITUDE_RAPPEL_HEURE[hab.categorie] || 8 * 60;
-        const diff = heureRappel - nowMin;
-        const keyHab = `hab-${hab.id}-${todayISO}`;
-        if (diff >= -1 && diff <= 1 && !notifiedRef.current.has(keyHab)) {
-          notifiedRef.current.add(keyHab);
-          sendNotification(
-            `Habitude : ${hab.nom}`,
-            `${hab.emoji || '⭐'} N'oublie pas ton habitude du jour !`,
-            '🔔', 'normal'
-          );
-        }
-      }
-
-      // ── 6. RAPPELS PROGRAMME ─────────────────────────────────────────
-
-      if (prefs.rappel_programme && programmes.length > 0) {
-        const programme = programmes.find(p => p.est_favori) || programmes[0];
-        const creneaux = programme.creneaux || [];
-        const jours = programme.jours || [];
-        const jourActif = jours.find(j => j.nom === todayName && j.actif !== false);
-        if (jours.length === 0 || jourActif) {
-          for (const cr of creneaux) {
-            const debut = parseHeureMin(cr.libelle);
-            if (debut === null) continue;
-            const diff = debut - nowMin;
-
-            const key15 = `cr15-${cr.id || cr.libelle}-${minuteKey}`;
-            if (diff >= 14 && diff <= 16 && !notifiedRef.current.has(key15)) {
-              notifiedRef.current.add(key15);
-              sendNotification(cr.contenu || 'Activité',
-                `Dans 15 min — prépare-toi ! Début à ${cr.libelle?.split('-')[0] || ''}`,
-                '⏰', 'normal');
+              await sendNotification(
+                '📝 Dans 15 minutes',
+                title,
+                {
+                  alarmType: 'warning',
+                  tag: key,
+                }
+              );
             }
+          }
 
-            const keyExact = `crExact-${cr.id || cr.libelle}-${minuteKey}`;
-            if (diff >= 0 && diff <= 1 && !notifiedRef.current.has(keyExact)) {
-              notifiedRef.current.add(keyExact);
-              sendNotification(cr.contenu || 'Activité',
-                `C'est maintenant ! ${cr.libelle} 🚀`,
-                '🔥', 'normal');
+          if (
+            diff === 5 &&
+            note.notifie !== true
+          ) {
+            const key = `note5-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '📝 Dans 5 minutes',
+                title,
+                {
+                  alarmType: 'urgent',
+                  tag: key,
+                }
+              );
+            }
+          }
+
+          if (
+            diff === 0 &&
+            note.notifie !== true
+          ) {
+            const key = `noteExact-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '📝 Note calendrier',
+                title,
+                {
+                  alarmType: 'normal',
+                  tag: key,
+                }
+              );
             }
           }
         }
-      }
 
-      // ── 7. RAPPELS NOTES CALENDRIER ───────────────────────────────────
+        /*
+         * ------------------------------------------
+         * RAPPELS
+         * ------------------------------------------
+         */
+        for (const rappel of rappels) {
+          if (
+            rappel.actif === false ||
+            rappel.enabled === false
+          ) {
+            continue;
+          }
 
-      const notesAujourd = notes.filter(n => n.date === todayISO && !n.notifie && n.heure_rappel);
-      for (const note of notesAujourd) {
-        const heureMin = parseHeureMin(note.heure_rappel);
-        if (heureMin === null) continue;
-        const diff = heureMin - nowMin;
+          const date = rappel.date;
 
-        // ─ 15 min avant
-        const keyN15 = `note15-${note.id}-${todayISO}`;
-        if (diff >= 14 && diff <= 16 && !notifiedRef.current.has(keyN15)) {
-          notifiedRef.current.add(keyN15);
-          sendNotification(
-            `📌 ${note.titre}`,
-            note.contenu
-              ? `Dans 15 min — « ${note.contenu.slice(0, 80)}${note.contenu.length > 80 ? '…' : ''} »`
-              : `Rappel dans 15 minutes ⏰`,
-            '📌', 'normal'
+          if (
+            date &&
+            date !== todayISO
+          ) {
+            continue;
+          }
+
+          const time = getItemTime(rappel);
+          const rappelMin = parseHeureMin(time);
+
+          if (rappelMin === null) continue;
+
+          const diff = rappelMin - currentMinutes;
+
+          const id = getItemId(
+            rappel,
+            'rappel'
           );
+
+          const title =
+            getItemTitle(rappel);
+
+          const baseKey =
+            `${todayISO}-${id}-${rappelMin}`;
+
+          if (diff === 0) {
+            const key = `rappelExact-${baseKey}`;
+
+            if (!notifiedRef.current.has(key)) {
+              notifiedRef.current.add(key);
+
+              await sendNotification(
+                '🔔 Rappel',
+                title,
+                {
+                  alarmType: isAlarme(rappel)
+                    ? 'alarm'
+                    : 'normal',
+                  requireInteraction:
+                    isAlarme(rappel),
+                  tag: key,
+                }
+              );
+            }
+          }
         }
 
-        // ─ 5 min avant
-        const keyN5 = `note5-${note.id}-${todayISO}`;
-        if (diff >= 4 && diff <= 6 && !notifiedRef.current.has(keyN5)) {
-          notifiedRef.current.add(keyN5);
-          sendNotification(
-            `📌 ${note.titre}`,
-            note.contenu
-              ? `⚡ Dans 5 min — « ${note.contenu.slice(0, 80)}${note.contenu.length > 80 ? '…' : ''} »`
-              : `⚡ C'est imminent !`,
-            '⏰', 'warning'
-          );
-        }
+        /*
+         * ------------------------------------------
+         * BILAN MIDI
+         * ------------------------------------------
+         */
+        if (
+          prefs.bilan_midi &&
+          now.getHours() === 12 &&
+          now.getMinutes() === 0
+        ) {
+          const key = `bilan-midi-${todayISO}`;
 
-        // ─ Heure exacte
-        const keyNExact = `noteExact-${note.id}-${todayISO}`;
-        if (diff >= 0 && diff <= 1 && !notifiedRef.current.has(keyNExact)) {
-          notifiedRef.current.add(keyNExact);
-          sendNotification(
-            `📌 ${note.titre}`,
-            note.contenu || `C'est l'heure — note du calendrier`,
-            '🔔', 'normal'
-          );
-          // Marquer comme notifié
-          base44.entities.NoteCalendrier.update(note.id, { notifie: true }).catch(() => {});
-        }
-      }
+          if (!notifiedRef.current.has(key)) {
+            notifiedRef.current.add(key);
 
-      // ── 8. RAPPELS (entité Rappel) ────────────────────────────────────
+            const total = tasksToday.length;
+            const faites = tasksToday.filter(
+              (t) => t.faite === true
+            ).length;
 
-      for (const rappel of rappels) {
-        const heureMin = parseHeureMin(rappel.heure);
-        if (heureMin === null) continue;
-        const diff = heureMin - nowMin;
-        const emoji = rappel.important ? '⭐' : '🔔';
-        const soundType = rappel.important ? 'urgent' : 'normal';
-
-        // 15 min avant (rappels importants uniquement)
-        if (rappel.important) {
-          const keyR15 = `rappel15-${rappel.id}-${minuteKey}`;
-          if (diff >= 14 && diff <= 16 && !notifiedRef.current.has(keyR15)) {
-            notifiedRef.current.add(keyR15);
-            sendNotification(
-              `⭐ ${rappel.titre}`,
-              `Dans 15 min — prépare-toi !`,
-              '⭐', 'normal'
+            await sendNotification(
+              '☀️ Bilan de midi',
+              `${faites}/${total} tâche(s) terminée(s).`,
+              {
+                alarmType: 'normal',
+                tag: key,
+              }
             );
           }
         }
 
-        // 5 min avant
-        const keyR5 = `rappel5-${rappel.id}-${minuteKey}`;
-        if (diff >= 4 && diff <= 6 && !notifiedRef.current.has(keyR5)) {
-          notifiedRef.current.add(keyR5);
-          sendNotification(
-            `${emoji} ${rappel.titre}`,
-            `⚡ Dans 5 min — c'est imminent !`,
-            emoji, 'warning'
-          );
+        /*
+         * ------------------------------------------
+         * BILAN SOIR
+         * ------------------------------------------
+         */
+        if (
+          prefs.bilan_soir &&
+          now.getHours() ===
+            Number(prefs.heure_bilan_soir) &&
+          now.getMinutes() === 0
+        ) {
+          const key = `bilan-soir-${todayISO}`;
+
+          if (!notifiedRef.current.has(key)) {
+            notifiedRef.current.add(key);
+
+            await sendNotification(
+              '🌙 Bilan du jour',
+              'Regarde tes tâches et prépare demain.',
+              {
+                alarmType: 'normal',
+                tag: key,
+              }
+            );
+          }
         }
 
-        // Heure exacte
-        const keyRExact = `rappelExact-${rappel.id}-${minuteKey}`;
-        if (diff >= 0 && diff <= 1 && !notifiedRef.current.has(keyRExact)) {
-          notifiedRef.current.add(keyRExact);
-          sendNotification(
-            `${emoji} ${rappel.titre}`,
-            `C'est l'heure de ton rappel !`,
-            emoji, soundType
+        /*
+         * ------------------------------------------
+         * NETTOYAGE DU CACHE ANTI-DOUBLONS
+         * ------------------------------------------
+         */
+        if (notifiedRef.current.size > 1000) {
+          const values = Array.from(
+            notifiedRef.current
+          );
+
+          notifiedRef.current = new Set(
+            values.slice(-500)
           );
         }
-      }
-
-      // Nettoyage mémoire
-      if (notifiedRef.current.size > 500) {
-        const arr = [...notifiedRef.current];
-        notifiedRef.current = new Set(arr.slice(-250));
+      } catch (error) {
+        console.error(
+          'Erreur notifications :',
+          error
+        );
+      } finally {
+        runningRef.current = false;
       }
     }
 
-    // Vérifie toutes les 30 secondes pour ne rien rater
-    const interval = setInterval(checkAll, 30 * 1000);
+    /*
+     * Vérification immédiate
+     */
     checkAll();
+
+    /*
+     * Vérification toutes les 30 secondes
+     */
+    intervalRef.current = setInterval(
+      checkAll,
+      30 * 1000
+    );
+
+    /*
+     * Quand l'utilisateur revient sur l'application
+     */
+    const handleVisibility = () => {
+      if (
+        document.visibilityState === 'visible'
+      ) {
+        checkAll();
+      }
+    };
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibility
+    );
+
+    /*
+     * Quand le Service Worker devient contrôleur
+     */
+    const handleControllerChange = () => {
+      checkAll();
+    };
+
+    navigator.serviceWorker?.addEventListener(
+      'controllerchange',
+      handleControllerChange
+    );
+
     return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      cancelled = true;
+
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibility
+      );
+
+      navigator.serviceWorker?.removeEventListener(
+        'controllerchange',
+        handleControllerChange
+      );
     };
   }, []);
 }
