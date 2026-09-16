@@ -1,261 +1,1205 @@
-const CACHE_NAME = 'Organize_Me-v2';
-const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
+const CACHE_NAME = 'coach-elite-v3';
 
-// ── Lifecycle ───────────────────────────────────────────────────────
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+];
+
+
+/*
+ * -----------------------------------------
+ * INSTALLATION
+ * -----------------------------------------
+ */
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS).catch(() => {}))
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        return cache.addAll(STATIC_ASSETS);
+      })
+      .catch(() => {})
   );
+
   self.skipWaiting();
 });
 
+
+/*
+ * -----------------------------------------
+ * ACTIVATION
+ * -----------------------------------------
+ */
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => {
+        return Promise.all(
+          keys
+            .filter(
+              (key) => key !== CACHE_NAME
+            )
+            .map((key) =>
+              caches.delete(key)
+            )
+        );
+      })
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// ── Fetch (network-first) ───────────────────────────────────────────
+
+/*
+ * -----------------------------------------
+ * FETCH
+ * -----------------------------------------
+ */
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
+        const clone = response.clone();
+
+        caches.open(CACHE_NAME)
+          .then((cache) => {
+            cache.put(
+              event.request,
+              clone
+            );
+          })
+          .catch(() => {});
+
         return response;
       })
-      .catch(() => caches.match(event.request).then(r => r || caches.match('/')))
+      .catch(() => {
+        return caches.match(
+          event.request
+        );
+      })
   );
 });
 
-// ── Push notifications ──────────────────────────────────────────────
+
+/*
+ * -----------------------------------------
+ * NOTIFICATION PUSH
+ * -----------------------------------------
+ */
 self.addEventListener('push', (event) => {
-  let data = { title: 'Coach Elite', body: 'Vous avez un rappel', urgent: false };
-  try { data = { ...data, ...event.data.json() }; } catch {
-    try { data.body = event.data.text(); } catch {}
-  }
-  event.waitUntil(
-    self.registration.showNotification(data.title || '🔔 Coach Elite', {
-      body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      tag: `push-${Date.now()}`,
-      requireInteraction: data.urgent || false,
-      vibrate: data.urgent ? [500, 200, 500, 200, 500] : [200, 100, 200],
-    })
-  );
-});
+  let data = {};
 
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) return client.focus();
-      }
-      return self.clients.openWindow('/');
-    })
-  );
-});
-
-// ── IndexedDB helper ────────────────────────────────────────────────
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('coach-elite-sw', 1);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+  try {
+    data = event.data
+      ? event.data.json()
+      : {};
+  } catch {
+    data = {
+      title: '🔔 Notification',
+      body: event.data
+        ? event.data.text()
+        : 'Nouvelle notification',
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+  }
+
+  const title =
+    data.title ||
+    '🔔 Coach Elite';
+
+  const options = {
+    body:
+      data.body ||
+      'Tu as une notification.',
+    icon:
+      data.icon ||
+      '/favicon.ico',
+    badge:
+      data.badge ||
+      '/favicon.ico',
+    tag:
+      data.tag ||
+      `push-${Date.now()}`,
+    requireInteraction:
+      Boolean(data.requireInteraction),
+    data: {
+      url:
+        data.url ||
+        '/',
+    },
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(
+      title,
+      options
+    )
+  );
+});
+
+
+/*
+ * -----------------------------------------
+ * CLIC SUR NOTIFICATION
+ * -----------------------------------------
+ */
+self.addEventListener(
+  'notificationclick',
+  (event) => {
+    event.notification.close();
+
+    const url =
+      event.notification?.data?.url ||
+      '/';
+
+    event.waitUntil(
+      self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+      .then((clientList) => {
+
+        /*
+         * Si l'application est déjà ouverte,
+         * on la remet au premier plan.
+         */
+        for (const client of clientList) {
+          if (
+            'focus' in client
+          ) {
+            return client.focus();
+          }
+        }
+
+        /*
+         * Sinon on ouvre l'application.
+         */
+        if (
+          self.clients.openWindow
+        ) {
+          return self.clients.openWindow(
+            url
+          );
+        }
+
+        return undefined;
+      })
+    );
+  }
+);
+
+
+/*
+ * =========================================
+ * INDEXED DB
+ * =========================================
+ */
+
+const DB_NAME = 'coach-elite-sw';
+const DB_VERSION = 1;
+const STORE_NAME = 'kv';
+
+
+function openDB() {
+  return new Promise(
+    (resolve, reject) => {
+
+      const request =
+        indexedDB.open(
+          DB_NAME,
+          DB_VERSION
+        );
+
+      request.onupgradeneeded = () => {
+        const db =
+          request.result;
+
+        if (
+          !db.objectStoreNames.contains(
+            STORE_NAME
+          )
+        ) {
+          db.createObjectStore(
+            STORE_NAME
+          );
+        }
+      };
+
+      request.onsuccess = () => {
+        resolve(request.result);
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    }
+  );
 }
+
 
 async function idbGet(key) {
   try {
     const db = await openDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction('kv', 'readonly');
-      const req = tx.objectStore('kv').get(key);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  } catch { return null; }
+
+    return await new Promise(
+      (resolve, reject) => {
+
+        const transaction =
+          db.transaction(
+            STORE_NAME,
+            'readonly'
+          );
+
+        const store =
+          transaction.objectStore(
+            STORE_NAME
+          );
+
+        const request =
+          store.get(key);
+
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+
+        request.onerror = () => {
+          reject(request.error);
+        };
+      }
+    );
+  } catch {
+    return null;
+  }
 }
 
-async function idbSet(key, value) {
+
+async function idbSet(
+  key,
+  value
+) {
   try {
     const db = await openDB();
-    await new Promise((resolve) => {
-      const tx = db.transaction('kv', 'readwrite');
-      tx.objectStore('kv').put(value, key);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    });
-  } catch {}
+
+    return await new Promise(
+      (resolve, reject) => {
+
+        const transaction =
+          db.transaction(
+            STORE_NAME,
+            'readwrite'
+          );
+
+        const store =
+          transaction.objectStore(
+            STORE_NAME
+          );
+
+        const request =
+          store.put(
+            value,
+            key
+          );
+
+        request.onsuccess = () => {
+          resolve(true);
+        };
+
+        request.onerror = () => {
+          reject(request.error);
+        };
+      }
+    );
+  } catch {
+    return false;
+  }
 }
 
-// ── Task checking engine ────────────────────────────────────────────
-const SW_JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
-function parseHeureMin(heure) {
-  if (!heure) return null;
-  const m = heure.match(/(\d+)h(\d*)/);
-  if (m) return parseInt(m[1]) * 60 + (parseInt(m[2] || '0') || 0);
-  const m2 = heure.match(/(\d+):(\d+)/);
-  if (m2) return parseInt(m2[1]) * 60 + parseInt(m2[2]);
-  const m3 = heure.match(/^(\d+)$/);
-  if (m3) return parseInt(m3[1]) * 60;
+/*
+ * =========================================
+ * OUTILS
+ * =========================================
+ */
+
+function localISODate(
+  date = new Date()
+) {
+  const y =
+    date.getFullYear();
+
+  const m =
+    String(
+      date.getMonth() + 1
+    ).padStart(2, '0');
+
+  const d =
+    String(
+      date.getDate()
+    ).padStart(2, '0');
+
+  return `${y}-${m}-${d}`;
+}
+
+
+function getDayName(
+  date = new Date()
+) {
+  const days = [
+    'Dimanche',
+    'Lundi',
+    'Mardi',
+    'Mercredi',
+    'Jeudi',
+    'Vendredi',
+    'Samedi',
+  ];
+
+  return days[
+    date.getDay()
+  ];
+}
+
+
+function parseHeureMin(
+  value
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value === 'number'
+  ) {
+    const h =
+      Math.floor(value);
+
+    const m =
+      Math.round(
+        (value - h) * 60
+      );
+
+    if (
+      h >= 0 &&
+      h <= 23 &&
+      m >= 0 &&
+      m <= 59
+    ) {
+      return h * 60 + m;
+    }
+
+    return null;
+  }
+
+  const str =
+    String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s/g, '');
+
+  let match =
+    str.match(
+      /^(\d{1,2})h(\d{1,2})?$/
+    );
+
+  if (match) {
+    const h =
+      Number(match[1]);
+
+    const m =
+      Number(match[2] || 0);
+
+    if (
+      h >= 0 &&
+      h <= 23 &&
+      m >= 0 &&
+      m <= 59
+    ) {
+      return h * 60 + m;
+    }
+
+    return null;
+  }
+
+  match =
+    str.match(
+      /^(\d{1,2}):(\d{1,2})$/
+    );
+
+  if (match) {
+    const h =
+      Number(match[1]);
+
+    const m =
+      Number(match[2]);
+
+    if (
+      h >= 0 &&
+      h <= 23 &&
+      m >= 0 &&
+      m <= 59
+    ) {
+      return h * 60 + m;
+    }
+
+    return null;
+  }
+
+  if (
+    /^\d{1,2}$/.test(str)
+  ) {
+    const h =
+      Number(str);
+
+    if (
+      h >= 0 &&
+      h <= 23
+    ) {
+      return h * 60;
+    }
+  }
+
   return null;
 }
 
-function showNotif(title, body, urgent) {
-  self.registration.showNotification(title, {
-    body,
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    tag: `coach-${title.slice(0, 15)}-${Date.now()}`,
-    requireInteraction: urgent,
-    vibrate: urgent ? [500, 200, 500, 200, 500] : [200, 100, 200],
-  });
+
+function getTitle(item) {
+  return (
+    item?.titre ||
+    item?.title ||
+    item?.nom ||
+    item?.texte ||
+    item?.description ||
+    'Tâche'
+  );
 }
+
+
+function getTime(item) {
+  return (
+    item?.heure ||
+    item?.time ||
+    item?.heure_debut ||
+    item?.start_time ||
+    item?.debut ||
+    null
+  );
+}
+
+
+function getDay(item) {
+  return (
+    item?.jour ||
+    item?.day ||
+    item?.date_jour ||
+    null
+  );
+}
+
+
+function getId(
+  item,
+  fallback = 'item'
+) {
+  return (
+    item?.id ||
+    item?._id ||
+    item?.uuid ||
+    `${fallback}-${getTitle(item)}-${getTime(item)}`
+  );
+}
+
+
+/*
+ * =========================================
+ * NOTIFICATION
+ * =========================================
+ */
+
+async function showNotif(
+  title,
+  body,
+  options = {}
+) {
+  try {
+    await self.registration.showNotification(
+      title,
+      {
+        body,
+        icon:
+          options.icon ||
+          '/favicon.ico',
+        badge:
+          options.badge ||
+          '/favicon.ico',
+        tag:
+          options.tag ||
+          `coach-${Date.now()}`,
+        requireInteraction:
+          Boolean(
+            options.requireInteraction
+          ),
+        renotify: true,
+        data: {
+          url:
+            options.url ||
+            '/',
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      'Erreur notification SW :',
+      error
+    );
+  }
+}
+
+
+/*
+ * =========================================
+ * PRÉFÉRENCES PAR DÉFAUT
+ * =========================================
+ */
+
+const DEFAULT_PREFS = {
+  rappel_avant: 10,
+  rappel_30min: true,
+  rappel_15min: true,
+  rappel_5min: true,
+  rappel_exact: true,
+  retard_alerte: true,
+};
+
+
+/*
+ * =========================================
+ * VÉRIFICATION DES TÂCHES
+ * =========================================
+ */
 
 async function checkDueTasks() {
-  // Don't fire if a tab is visible — the React app handles it
-  const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-  if (allClients.some(c => c.visibilityState === 'visible')) return;
 
-  const store = await idbGet('task-store');
-  if (!store || !store.tasks) return;
+  /*
+   * Si l'application est ouverte
+   * dans une fenêtre visible, React
+   * s'occupe des notifications.
+   *
+   * Cela évite les doublons.
+   */
+  try {
+    const clients =
+      await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
 
-  const now = new Date();
-  const todayIndex = now.getDay() === 0 ? 6 : now.getDay() - 1;
-  const todayName = SW_JOURS[todayIndex];
-  const todayISO = now.toISOString().slice(0, 10);
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const minuteKey = now.toISOString().slice(0, 16);
+    const visibleClient =
+      clients.some(
+        (client) =>
+          client.visibilityState ===
+          'visible'
+      );
 
-  let sentKeys = (await idbGet('sent-keys')) || [];
-  const hasKey = (k) => sentKeys.includes(k);
-  const addKey = (k) => { sentKeys.push(k); if (sentKeys.length > 300) sentKeys.splice(0, sentKeys.length - 150); };
+    if (visibleClient) {
+      return;
+    }
+  } catch {
+    // On continue
+  }
 
-  const prefs = store.prefs || {};
-  const tasksToday = store.tasks.filter(t => !t.faite);
 
+  const store =
+    await idbGet('task-store');
+
+  if (!store) {
+    return;
+  }
+
+
+  const now =
+    new Date();
+
+  const todayISO =
+    localISODate(now);
+
+  const todayName =
+    getDayName(now);
+
+  const currentMinutes =
+    now.getHours() * 60 +
+    now.getMinutes();
+
+
+  const prefs = {
+    ...DEFAULT_PREFS,
+    ...(store.prefs || {}),
+  };
+
+
+  const tasks =
+    Array.isArray(store.tasks)
+      ? store.tasks
+      : [];
+
+
+  const notes =
+    Array.isArray(store.notes)
+      ? store.notes
+      : [];
+
+
+  /*
+   * Les tâches reçues par React sont normalement
+   * déjà celles du jour.
+   *
+   * On filtre quand même par jour pour
+   * plus de sécurité.
+   */
+  const tasksToday =
+    tasks.filter((task) => {
+
+      if (task.faite === true) {
+        return false;
+      }
+
+      const day =
+        getDay(task);
+
+      if (!day) {
+        return true;
+      }
+
+      return (
+        day === todayName ||
+        day === todayISO
+      );
+    });
+
+
+  const sentKeys =
+    Array.isArray(
+      store.sentKeys
+    )
+      ? store.sentKeys
+      : [];
+
+
+  /*
+   * On limite la taille du tableau.
+   */
+  let sent =
+    sentKeys.slice(-1000);
+
+
+  function hasSent(key) {
+    return sent.includes(key);
+  }
+
+
+  function markSent(key) {
+    if (!sent.includes(key)) {
+      sent.push(key);
+    }
+  }
+
+
+  /*
+   * -----------------------------------------
+   * TÂCHES
+   * -----------------------------------------
+   */
   for (const task of tasksToday) {
-    const taskMin = parseHeureMin(task.heure);
-    if (taskMin === null) continue;
-    const diff = taskMin - nowMin;
-    const isHigh = task.priorite === 'haute' || task.categorie === 'sommeil';
 
-    // 30 min before
-    if (prefs.rappel_30min !== false) {
-      const k = `sw-30-${task.id}-${minuteKey}`;
-      if (diff >= 29 && diff <= 31 && !hasKey(k)) {
-        addKey(k);
-        showNotif(task.titre, `Dans 30 min — prépare-toi ! ⏰`, false);
+    const time =
+      getTime(task);
+
+    const taskMin =
+      parseHeureMin(time);
+
+    if (
+      taskMin === null
+    ) {
+      continue;
+    }
+
+
+    const diff =
+      taskMin -
+      currentMinutes;
+
+
+    const id =
+      getId(task, 'task');
+
+    const title =
+      getTitle(task);
+
+
+    /*
+     * IMPORTANT :
+     *
+     * La clé est basée sur l'heure
+     * de la tâche et non sur l'heure
+     * actuelle.
+     *
+     * Cela empêche les doublons.
+     */
+    const baseKey =
+      `${todayISO}-${id}-${taskMin}`;
+
+
+    /*
+     * Rappel personnalisé
+     */
+    if (
+      prefs.rappel_avant > 0 &&
+      ![5, 15, 30].includes(
+        Number(
+          prefs.rappel_avant
+        )
+      ) &&
+      diff === Number(
+        prefs.rappel_avant
+      )
+    ) {
+
+      const key =
+        `custom-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '⏰ Rappel',
+          `${title} commence dans ${prefs.rappel_avant} min.`,
+          {
+            tag: key,
+          }
+        );
       }
     }
 
-    // 15 min before
-    if (prefs.rappel_15min !== false) {
-      const k = `sw-15-${task.id}-${minuteKey}`;
-      if (diff >= 14 && diff <= 16 && !hasKey(k)) {
-        addKey(k);
-        showNotif(task.titre, `Dans 15 min — prépare-toi ! ⏰`, false);
+
+    /*
+     * 30 minutes
+     */
+    if (
+      prefs.rappel_30min &&
+      diff === 30
+    ) {
+
+      const key =
+        `30-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '⏳ Dans 30 minutes',
+          title,
+          {
+            tag: key,
+          }
+        );
       }
     }
 
-    // 5 min before
-    if (prefs.rappel_5min !== false) {
-      const k = `sw-5-${task.id}-${minuteKey}`;
-      if (diff >= 4 && diff <= 6 && !hasKey(k)) {
-        addKey(k);
-        showNotif(task.titre, isHigh ? `⚡ Dans 5 min — PRIORITÉ HAUTE !` : `⚡ Dans 5 min — c'est imminent !`, isHigh);
+
+    /*
+     * 15 minutes
+     */
+    if (
+      prefs.rappel_15min &&
+      diff === 15
+    ) {
+
+      const key =
+        `15-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '⏳ Dans 15 minutes',
+          title,
+          {
+            tag: key,
+          }
+        );
       }
     }
 
-    // Exact time
-    if (prefs.rappel_exact !== false) {
-      const k = `sw-exact-${task.id}-${minuteKey}`;
-      if (diff >= 0 && diff <= 1 && !hasKey(k)) {
-        addKey(k);
-        showNotif(task.titre, isHigh ? `🚨 C'est l'heure ! ALARME — agis maintenant !` : `🔔 C'est l'heure — à toi de jouer !`, isHigh);
+
+    /*
+     * 5 minutes
+     */
+    if (
+      prefs.rappel_5min &&
+      diff === 5
+    ) {
+
+      const key =
+        `5-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '🚨 Dans 5 minutes',
+          title,
+          {
+            tag: key,
+            requireInteraction: true,
+          }
+        );
       }
     }
 
-    // 15 min late
-    if (prefs.retard_alerte !== false) {
-      const k = `sw-late-${task.id}-${minuteKey}`;
-      if (diff <= -14 && diff >= -16 && !hasKey(k)) {
-        addKey(k);
-        showNotif(`En retard : ${task.titre}`, `Prévu à ${task.heure} — rattrape-toi ! 😤`, true);
+
+    /*
+     * Heure exacte
+     */
+    if (
+      prefs.rappel_exact &&
+      diff === 0
+    ) {
+
+      const key =
+        `exact-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '🔔 C’est l’heure',
+          title,
+          {
+            tag: key,
+            requireInteraction: true,
+          }
+        );
+      }
+    }
+
+
+    /*
+     * Retard 15 minutes
+     */
+    if (
+      prefs.retard_alerte &&
+      diff === -15
+    ) {
+
+      const key =
+        `late15-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '⚠️ Tâche en retard',
+          `${title} devait commencer il y a 15 minutes.`,
+          {
+            tag: key,
+          }
+        );
+      }
+    }
+
+
+    /*
+     * Retard 60 minutes
+     */
+    if (
+      prefs.retard_alerte &&
+      diff === -60 &&
+      (
+        task.priorite === 'haute' ||
+        task.priorite === 'urgent'
+      )
+    ) {
+
+      const key =
+        `late60-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '🚨 Retard important',
+          `${title} est en retard depuis 1 heure.`,
+          {
+            tag: key,
+            requireInteraction: true,
+          }
+        );
       }
     }
   }
 
-  // Calendar notes
-  if (store.notes && store.notes.length) {
-    const notesToday = store.notes.filter(n => !n.notifie && n.heure_rappel);
-    for (const note of notesToday) {
-      const noteMin = parseHeureMin(note.heure_rappel);
-      if (noteMin === null) continue;
-      const diff = noteMin - nowMin;
 
-      const k15 = `sw-note15-${note.id}-${minuteKey}`;
-      if (diff >= 14 && diff <= 16 && !hasKey(k15)) {
-        addKey(k15);
-        showNotif(`📌 ${note.titre}`, `Dans 15 min ⏰`, false);
+  /*
+   * -----------------------------------------
+   * NOTES CALENDRIER
+   * -----------------------------------------
+   */
+  for (const note of notes) {
+
+    if (
+      note.date !== todayISO ||
+      note.notifie === true
+    ) {
+      continue;
+    }
+
+
+    const time =
+      getTime(note);
+
+    const noteMin =
+      parseHeureMin(time);
+
+    if (
+      noteMin === null
+    ) {
+      continue;
+    }
+
+
+    const diff =
+      noteMin -
+      currentMinutes;
+
+
+    const id =
+      getId(note, 'note');
+
+    const title =
+      getTitle(note);
+
+
+    const baseKey =
+      `${todayISO}-${id}-${noteMin}`;
+
+
+    if (diff === 15) {
+
+      const key =
+        `note15-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '📝 Dans 15 minutes',
+          title,
+          {
+            tag: key,
+          }
+        );
       }
+    }
 
-      const k5 = `sw-note5-${note.id}-${minuteKey}`;
-      if (diff >= 4 && diff <= 6 && !hasKey(k5)) {
-        addKey(k5);
-        showNotif(`📌 ${note.titre}`, `⚡ Dans 5 min !`, false);
+
+    if (diff === 5) {
+
+      const key =
+        `note5-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '📝 Dans 5 minutes',
+          title,
+          {
+            tag: key,
+            requireInteraction: true,
+          }
+        );
       }
+    }
 
-      const kExact = `sw-note-${note.id}-${minuteKey}`;
-      if (diff >= 0 && diff <= 1 && !hasKey(kExact)) {
-        addKey(kExact);
-        showNotif(`📌 ${note.titre}`, note.contenu || `C'est l'heure — note du calendrier`, false);
+
+    if (diff === 0) {
+
+      const key =
+        `noteExact-${baseKey}`;
+
+      if (!hasSent(key)) {
+
+        markSent(key);
+
+        await showNotif(
+          '📝 Note calendrier',
+          title,
+          {
+            tag: key,
+          }
+        );
       }
     }
   }
 
-  await idbSet('sent-keys', sentKeys);
+
+  /*
+   * Sauvegarde anti-doublons
+   */
+  await idbSet(
+    'task-store',
+    {
+      ...store,
+      sentKeys: sent.slice(-1000),
+    }
+  );
 }
 
-// ── Periodic Background Sync ────────────────────────────────────────
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'task-check') {
-    event.waitUntil(checkDueTasks());
-  }
-});
 
-// ── Message handler (data sync from page) ───────────────────────────
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SYNC_DATA') {
-    event.waitUntil(idbSet('task-store', event.data.payload));
-  }
-  if (event.data && event.data.type === 'CHECK_NOW') {
-    event.waitUntil(checkDueTasks());
-  }
-});
+/*
+ * =========================================
+ * PERIODIC BACKGROUND SYNC
+ * =========================================
+ */
 
-// ── Background timer (runs while SW is alive) ──────────────────────
-// Fallback pour les navigateurs sans Periodic Sync : vérifie toutes
-// les 30s tant que le Service Worker reste actif.
-let swCheckTimer = null;
-function startBackgroundTimer() {
-  if (swCheckTimer) clearInterval(swCheckTimer);
-  swCheckTimer = setInterval(() => {
-    checkDueTasks().catch(() => {});
-  }, 30 * 1000);
-}
-startBackgroundTimer();
+self.addEventListener(
+  'periodicsync',
+  (event) => {
+
+    if (
+      event.tag === 'task-check'
+    ) {
+      event.waitUntil(
+        checkDueTasks()
+      );
+    }
+  }
+);
+
+
+/*
+ * =========================================
+ * MESSAGES DE L'APPLICATION
+ * =========================================
+ */
+
+self.addEventListener(
+  'message',
+  (event) => {
+
+    const data =
+      event.data || {};
+
+
+    /*
+     * React envoie les tâches
+     * et les préférences.
+     */
+    if (
+      data.type === 'SYNC_DATA'
+    ) {
+
+      const payload =
+        data.payload || {};
+
+
+      event.waitUntil(
+        idbGet('task-store')
+          .then((oldStore) => {
+
+            return idbSet(
+              'task-store',
+              {
+                tasks:
+                  payload.tasks ||
+                  [],
+                notes:
+                  payload.notes ||
+                  [],
+                prefs:
+                  {
+                    ...DEFAULT_PREFS,
+                    ...(payload.prefs ||
+                      {}),
+                  },
+
+                /*
+                 * On conserve les clés
+                 * déjà envoyées.
+                 */
+                sentKeys:
+                  oldStore?.sentKeys ||
+                  [],
+              }
+            );
+          })
+          .catch(() => {})
+      );
+
+      return;
+    }
+
+
+    /*
+     * Vérification immédiate.
+     */
+    if (
+      data.type === 'CHECK_NOW'
+    ) {
+
+      event.waitUntil(
+        checkDueTasks()
+      );
+
+      return;
+    }
+
+
+    /*
+     * Forcer activation immédiate.
+     */
+    if (
+      data.type === 'SKIP_WAITING'
+    ) {
+
+      self.skipWaiting();
+
+      return;
+    }
+  }
+);
+
+
+/*
+ * =========================================
+ * TIMER DE SECOURS
+ * =========================================
+ *
+ * Attention :
+ * Un navigateur peut arrêter complètement
+ * un Service Worker lorsqu'il n'en a plus besoin.
+ *
+ * Ce timer est donc un FALLBACK,
+ * pas une garantie d'alarme native.
+ */
+
+setInterval(
+  () => {
+    checkDueTasks()
+      .catch(() => {});
+  },
+  30 * 1000
+);
